@@ -1,0 +1,44 @@
+<Project>
+  <PropertyGroup>
+    <!-- Single source of truth for Major and Minor version components:
+         - Major: Integer between 0 and 999 (e.g. 0, 1, 2, 3...)
+         - Minor: Integer between 0 and 999 (e.g. 0, 1, 2... yielding 0.1, 0.2, 1.2, 2.1, 3.1)
+    -->
+    <AppMajor>0</AppMajor>
+    <AppMinor>2</AppMinor>
+    <AppMajorMinor>$(AppMajor).$(AppMinor)</AppMajorMinor>
+    
+    <!-- Dynamic build timestamp captured at compilation time -->
+    <AppBuildTimestamp>$([System.DateTime]::Now.ToString("yyyyMMdd.HHmm"))</AppBuildTimestamp>
+    
+    <!-- Unified Assembly & Informational Versions -->
+    <Version>$(AppMajorMinor).0</Version>
+    <AssemblyVersion>$(AppMajorMinor).0.0</AssemblyVersion>
+    <FileVersion>$(AppMajorMinor).0.0</FileVersion>
+    <InformationalVersion>$(AppMajorMinor)-$(AppBuildTimestamp)</InformationalVersion>
+    
+    <Company>Eduard Louis</Company>
+    <Product>Idle-Work Activity &amp; Time Tracker</Product>
+    <Copyright>Copyright © 2026</Copyright>
+  </PropertyGroup>
+
+  <!-- Pass version constants into C# compilers for UI and runtime display -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppMajor</_Parameter1>
+      <_Parameter2>$(AppMajor)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppMinor</_Parameter1>
+      <_Parameter2>$(AppMinor)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppMajorMinor</_Parameter1>
+      <_Parameter2>$(AppMajorMinor)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppBuildTimestamp</_Parameter1>
+      <_Parameter2>$(AppBuildTimestamp)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

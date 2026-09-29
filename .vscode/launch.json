@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET: Debug Idle-Work (WPF)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/IdleWork.App/bin/Debug/net8.0-windows/IdleWork.App.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/IdleWork.App",
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    },
+    {
+      "name": ".NET: Attach to IdleWork.App Process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}

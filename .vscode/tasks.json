@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/IdleWork.App/IdleWork.App.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary",
+        "/p:UseSharedCompilation=false",
+        "/nodeReuse:false"
+      ],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

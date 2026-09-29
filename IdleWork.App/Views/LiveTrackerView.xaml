@@ -1,0 +1,167 @@
+<!-- [v0.1: LiveTrackerView] Real-time tracking dashboard with microphone level and activity feed -->
+<UserControl x:Class="IdleWork.App.Views.LiveTrackerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:helpers="clr-namespace:IdleWork.App.Core.Helpers"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24">
+            
+            <!-- Hero Status Cards -->
+            <Grid Margin="0,0,0,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Current Active App Card -->
+                <Border Grid.Column="0" Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="MAIN ACTIVITY (WORK SOFTWARE)" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding ActiveProcess}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding ActiveTitle}" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                        
+                        <WrapPanel Orientation="Horizontal">
+                            <Border Background="#0F172A" CornerRadius="4" Padding="8,4" Margin="0,0,8,4">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Doc: " Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                                    <TextBlock Text="{Binding ActiveDoc}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Sub-Activity Badge if active on secondary screen -->
+                            <Border Background="#2A1B0E" BorderBrush="{StaticResource MeetingBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,4"
+                                    Visibility="{Binding HasSubActivity, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Sub-Activity (2nd Mon): " Foreground="{StaticResource MeetingBrush}" FontSize="11" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding SubProcess}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" FontWeight="SemiBold" Margin="4,0,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- State Indicator Card -->
+                <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="USER STATE" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="12" Height="12" Fill="{Binding StateColor}" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding ActiveState}" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding ActiveDurationText}" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" Margin="20,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Input & Microphone Card -->
+                <Border Grid.Column="4" Style="{StaticResource CardBorder}">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="SENSORS &amp; INPUTS" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,8" />
+                        
+                        <!-- Mic Audio Peak Level -->
+                        <TextBlock Text="Microphone Level" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                        <ProgressBar Value="{Binding MicLevel, Mode=OneWay}" Minimum="0" Maximum="1" Height="6" Background="#0F172A" Foreground="{StaticResource MeetingBrush}" Margin="0,0,0,8" />
+                        
+                        <!-- Idle Elapsed Timer -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Idle Time: " FontSize="12" Foreground="{StaticResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding IdleTimeText}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Recent Activity Timeline Section -->
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Real-Time Activity Feed" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="Live Capture Active" Foreground="{StaticResource ActiveBrush}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Items List -->
+                    <ListView ItemsSource="{Binding RecentActivities}" Background="Transparent" BorderThickness="0" 
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              helpers:ScrollHelper.BubbleMouseWheel="True">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#162032" CornerRadius="6" Padding="12,10" Margin="0,0,0,6" BorderBrush="#253347" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="65" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="130" />
+                                            <ColumnDefinition Width="80" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Start Time -->
+                                        <TextBlock Text="{Binding StartTime, StringFormat='{}{0:HH:mm:ss}'}" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" FontSize="12" />
+
+                                        <!-- Activities Badges (Main + Sub) -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <!-- Main Activity Badge -->
+                                            <Border Background="#1E293B" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="MAIN: " FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="10" />
+                                                    <TextBlock Text="{Binding ProcessName}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Sub-Activity Badge (Concurrent 2nd Monitor) -->
+                                            <Border Background="#2A1B0E" BorderBrush="{StaticResource MeetingBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,4,0,0" HorizontalAlignment="Left"
+                                                    Visibility="{Binding HasSubActivity, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="SUB: " FontWeight="Bold" Foreground="{StaticResource MeetingBrush}" FontSize="10" />
+                                                    <TextBlock Text="{Binding SubProcessName}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="10" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Window Title, Document & Sub-Activity Details -->
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
+                                            <!-- Main Window Details -->
+                                            <TextBlock Text="{Binding WindowTitle}" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" FontSize="13" />
+                                            <TextBlock Text="{Binding DocumentName}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+
+                                            <!-- Sub-Activity Details Row (if present on secondary screen) -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                                        Visibility="{Binding HasSubActivity, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                                <TextBlock Text="↳ Sub (2nd Mon): " Foreground="{StaticResource MeetingBrush}" FontSize="11" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding SubActivityDetailDisplay}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="380" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <!-- Project / Category Tag -->
+                                        <Border Grid.Column="3" Background="#0F172A" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding ProjectName, TargetNullValue='Unassigned'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                                        </Border>
+
+                                        <!-- Duration & State -->
+                                        <StackPanel Grid.Column="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayDuration}" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Right" FontSize="12" />
+                                            <TextBlock Text="{Binding State}" Foreground="{Binding StatusColorHex}" FontSize="11" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
+            </Border>
+            
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
