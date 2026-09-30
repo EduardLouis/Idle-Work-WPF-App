@@ -23,10 +23,13 @@ namespace IdleWork.App.Views
             {
                 foreach (var r in existingRules)
                 {
-                    Rules.Add(new SelectableRule(r, isSelected: false));
+                    var item = new SelectableRule(r, isSelected: false);
+                    item.SelectionChanged += (s, e) => UpdateRulesSummary();
+                    Rules.Add(item);
                 }
             }
             RulesItemsControl.ItemsSource = Rules;
+            UpdateRulesSummary();
 
             if (!string.IsNullOrWhiteSpace(initialName))
             {
@@ -43,41 +46,59 @@ namespace IdleWork.App.Views
             };
         }
 
+        private void UpdateRulesSummary()
+        {
+            var selected = Rules.Where(r => r.IsSelected).ToList();
+            if (selected.Count == 0)
+                RulesSummaryTextBlock.Text = "No rules linked (Click to select)";
+            else if (selected.Count == 1)
+                RulesSummaryTextBlock.Text = $"1 rule linked: {selected[0].RuleName}";
+            else if (selected.Count <= 2)
+                RulesSummaryTextBlock.Text = $"{selected.Count} rules linked: {string.Join(", ", selected.Select(r => r.RuleName))}";
+            else
+                RulesSummaryTextBlock.Text = $"{selected.Count} rules linked: {selected[0].RuleName}, {selected[1].RuleName}...";
+        }
+
+        private void SelectAllRules_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var r in Rules) r.IsSelected = true;
+            UpdateRulesSummary();
+        }
+
+        private void ClearAllRules_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var r in Rules) r.IsSelected = false;
+            UpdateRulesSummary();
+        }
+
+        private async void AddNewRule_Click(object sender, RoutedEventArgs e)
+        {
+            var db = IdleWork.App.Core.Services.DatabaseService.Instance;
+            var projects = await db.GetProjectsAsync();
+            var categories = await db.GetCategoriesAsync();
+            var tags = await db.GetTagsAsync();
+
+            string prjName = NameTextBox.Text?.Trim() ?? "New Project";
+            var dlg = new NewRuleDialog(null, projects, categories, tags, prjName)
+            {
+                Owner = this
+            };
+
+            if (dlg.ShowDialog() == true && dlg.CreatedRule != null)
+            {
+                var item = new SelectableRule(dlg.CreatedRule, isSelected: true, isNew: true);
+                item.SelectionChanged += (s, ev) => UpdateRulesSummary();
+                Rules.Add(item);
+                UpdateRulesSummary();
+            }
+        }
+
         private void ColorChip_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is string hex)
             {
                 ColorTextBox.Text = hex;
             }
-        }
-
-        private void AddQuickRule_Click(object sender, RoutedEventArgs e)
-        {
-            string proc = QuickRuleProcessTextBox.Text?.Trim() ?? "";
-            string title = QuickRuleTitleTextBox.Text?.Trim() ?? "";
-
-            if (string.IsNullOrWhiteSpace(proc) && string.IsNullOrWhiteSpace(title))
-            {
-                MessageBox.Show("Please enter an application process or title keyword for the rule.", "Rule Info Needed", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            string prj = !string.IsNullOrWhiteSpace(NameTextBox.Text) ? NameTextBox.Text.Trim() : "Project";
-            string ruleName = !string.IsNullOrWhiteSpace(proc) ? $"{prj} - {proc}" : $"{prj} - {title}";
-
-            var newRule = new AutoTagRule
-            {
-                RuleName = ruleName,
-                ProcessFilter = string.IsNullOrWhiteSpace(proc) ? null : proc,
-                TitlePattern = string.IsNullOrWhiteSpace(title) ? null : title,
-                TargetProject = prj,
-                IsEnabled = true,
-                Priority = 50
-            };
-
-            Rules.Add(new SelectableRule(newRule, isSelected: true, isNew: true));
-            QuickRuleProcessTextBox.Text = "";
-            QuickRuleTitleTextBox.Text = "";
         }
 
         private void CreateButton_Click(object sender, RoutedEventArgs e)

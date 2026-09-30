@@ -1,16 +1,17 @@
-// [v0.1: OutlookPlugin] Microsoft Outlook calendar synchronization and appointment matching plugin
+// [v0.003: OutlookPlugin] Microsoft Outlook deep email inspection and calendar synchronization plugin
 using System;
 using System.Threading.Tasks;
 using IdleWork.App.Core.Models;
+using IdleWork.App.Core.Native;
 
 namespace IdleWork.App.Plugins
 {
     public class OutlookCalendarPlugin : IIdleWorkPlugin
     {
         public string Id => "microsoft.outlook";
-        public string Name => "Outlook Calendar Sync";
-        public string Description => "Matches scheduled calendar meetings against tracked time blocks.";
-        public string Version => "0.1";
+        public string Name => "Outlook Email & Calendar Integration";
+        public string Description => "Extracts current open/selected email subject, sender, and folder details from Classic Outlook (COM) and New Outlook (olk.exe).";
+        public string Version => "0.003";
         public bool IsEnabled { get; set; } = true;
 
         public Task InitializeAsync()
@@ -23,10 +24,49 @@ namespace IdleWork.App.Plugins
             if (!IsEnabled)
                 return Task.CompletedTask;
 
-            bool isOutlook = activity.ProcessName.Contains("OUTLOOK", StringComparison.OrdinalIgnoreCase);
-            if (isOutlook && string.IsNullOrEmpty(activity.Category))
+            // Check if active or sub activity is Outlook (Classic 'OUTLOOK' or New 'olk')
+            bool isOutlookMain = activity.ProcessName.Equals("OUTLOOK", StringComparison.OrdinalIgnoreCase) ||
+                                 activity.ProcessName.Equals("olk", StringComparison.OrdinalIgnoreCase);
+
+            bool isOutlookSub = !string.IsNullOrEmpty(activity.SubProcessName) &&
+                                (activity.SubProcessName.Equals("OUTLOOK", StringComparison.OrdinalIgnoreCase) ||
+                                 activity.SubProcessName.Equals("olk", StringComparison.OrdinalIgnoreCase));
+
+            if (isOutlookMain)
             {
-                activity.Category = "Email & Calendar";
+                var fgHwnd = User32.GetForegroundWindow();
+                var emailInfo = OutlookInteropService.GetCurrentEmailInfo(activity.ProcessName, activity.WindowTitle, fgHwnd);
+
+                if (emailInfo.HasDetails)
+                {
+                    string summary = emailInfo.FormatDocumentSummary();
+                    if (!string.IsNullOrEmpty(summary))
+                    {
+                        activity.DocumentName = summary;
+                    }
+
+                    if (!string.IsNullOrEmpty(emailInfo.Subject))
+                    {
+                        // If window title was generic "Inbox - Eduard Louis - Outlook" or "olk", provide rich context
+                        if (emailInfo.IsEmailOpen || activity.WindowTitle.Contains("Inbox", StringComparison.OrdinalIgnoreCase))
+                        {
+                            activity.WindowTitle = $"{emailInfo.Subject} (From: {emailInfo.SenderDisplay})";
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(activity.Category))
+                {
+                    activity.Category = "Email & Communication";
+                }
+            }
+            else if (isOutlookSub)
+            {
+                var emailInfo = OutlookInteropService.GetCurrentEmailInfo(activity.SubProcessName!, activity.SubWindowTitle ?? string.Empty, IntPtr.Zero);
+                if (emailInfo.HasDetails)
+                {
+                    activity.SubDocumentName = emailInfo.FormatDocumentSummary();
+                }
             }
 
             return Task.CompletedTask;

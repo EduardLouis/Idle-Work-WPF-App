@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using IdleWork.App.Core.Helpers;
 using IdleWork.App.Core.Models;
 using IdleWork.App.Core.Services;
 
@@ -112,7 +113,8 @@ namespace IdleWork.App.ViewModels
             _audioService = audioService;
             _aggregator = aggregator;
             _databaseService = databaseService;
-            _dispatcher = Dispatcher.CurrentDispatcher;
+            // [v0.004: DispatcherSafety] Ensure reference to primary UI dispatcher
+            _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
             _audioService.PeakLevelChanged += (s, peak) =>
             {
@@ -159,16 +161,25 @@ namespace IdleWork.App.ViewModels
             {
                 _dispatcher.InvokeAsync(() =>
                 {
+                    // [v0.003: Deduplication] Prevent duplicate insertion if already in RecentActivities
+                    if (act.Id != 0 && RecentActivities.Any(x => x.Id == act.Id))
+                        return;
+
+                    if (RecentActivities.Any(x => x.StartTime == act.StartTime && x.ProcessName == act.ProcessName && x.WindowTitle == act.WindowTitle))
+                        return;
+
                     RecentActivities.Insert(0, act);
                     if (RecentActivities.Count > 25)
                         RecentActivities.RemoveAt(RecentActivities.Count - 1);
                 });
             };
 
-            LoadDataAsync();
+            // [v0.004: AsyncRefactoring] Safe initial data load
+            LoadDataAsync().SafeFireAndForget("LiveTrackerVM_Init");
         }
 
-        private async void LoadDataAsync()
+        // [v0.004: AsyncRefactoring] Refactored to async Task
+        public async Task LoadDataAsync()
         {
             var projects = await _databaseService.GetProjectsAsync();
             foreach (var p in projects)
@@ -176,7 +187,17 @@ namespace IdleWork.App.ViewModels
 
             var recents = await _databaseService.GetRecentActivitiesAsync(15);
             foreach (var r in recents)
-                RecentActivities.Add(r);
+            {
+                // [v0.003: Deduplication] Avoid re-adding an activity already inserted via real-time event
+                bool alreadyPresent = RecentActivities.Any(x =>
+                    (r.Id != 0 && x.Id == r.Id) ||
+                    (x.StartTime == r.StartTime && x.ProcessName == r.ProcessName && x.WindowTitle == r.WindowTitle));
+
+                if (!alreadyPresent)
+                {
+                    RecentActivities.Add(r);
+                }
+            }
         }
     }
 }

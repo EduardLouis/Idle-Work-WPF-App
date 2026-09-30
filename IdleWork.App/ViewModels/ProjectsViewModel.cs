@@ -28,6 +28,23 @@ namespace IdleWork.App.ViewModels
         public ObservableCollection<Project> Projects { get; } = new ObservableCollection<Project>();
         public ObservableCollection<SelectableRule> AvailableRules { get; } = new ObservableCollection<SelectableRule>();
 
+        public event EventHandler? RequestCreateNewRule;
+
+        public string SelectedRulesSummaryText
+        {
+            get
+            {
+                var selected = AvailableRules.Where(r => r.IsSelected).ToList();
+                if (selected.Count == 0)
+                    return "No rules linked (Click to select)";
+                if (selected.Count == 1)
+                    return $"1 rule linked: {selected[0].RuleName}";
+                if (selected.Count <= 2)
+                    return $"{selected.Count} rules linked: {string.Join(", ", selected.Select(r => r.RuleName))}";
+                return $"{selected.Count} rules linked: {selected[0].RuleName}, {selected[1].RuleName}...";
+            }
+        }
+
         public Project? SelectedProject
         {
             get => _selectedProject;
@@ -97,6 +114,106 @@ namespace IdleWork.App.ViewModels
 
         public string SaveButtonText => _editingProjectId == 0 ? "+ Create Project" : "💾 Update Project";
 
+        // [v0.2: Categories] Categories management
+        private WorkCategory? _selectedCategory;
+        private int _editingCategoryId = 0;
+        private string _categoryName = "";
+        private string _categoryDescription = "";
+        private string _categoryColorHex = "#3B82F6";
+
+        public ObservableCollection<WorkCategory> Categories { get; } = new ObservableCollection<WorkCategory>();
+
+        public WorkCategory? SelectedCategory
+        {
+            get => _selectedCategory;
+            set
+            {
+                if (SetProperty(ref _selectedCategory, value))
+                {
+                    if (value != null)
+                    {
+                        _editingCategoryId = value.Id;
+                        CategoryName = value.Name;
+                        CategoryDescription = value.Description ?? "";
+                        CategoryColorHex = value.ColorHex;
+                        OnPropertyChanged(nameof(SaveCategoryButtonText));
+                        StatusMessage = $"Selected category: {value.Name}";
+                    }
+                    else
+                    {
+                        _editingCategoryId = 0;
+                        OnPropertyChanged(nameof(SaveCategoryButtonText));
+                    }
+                }
+            }
+        }
+
+        public string CategoryName
+        {
+            get => _categoryName;
+            set => SetProperty(ref _categoryName, value);
+        }
+
+        public string CategoryDescription
+        {
+            get => _categoryDescription;
+            set => SetProperty(ref _categoryDescription, value);
+        }
+
+        public string CategoryColorHex
+        {
+            get => _categoryColorHex;
+            set => SetProperty(ref _categoryColorHex, value);
+        }
+
+        public string SaveCategoryButtonText => _editingCategoryId == 0 ? "+ Add Category" : "💾 Update Category";
+
+        // [v0.2: Tags] Tags management
+        private WorkTag? _selectedTag;
+        private int _editingTagId = 0;
+        private string _tagName = "";
+        private string _tagDescription = "";
+
+        public ObservableCollection<WorkTag> Tags { get; } = new ObservableCollection<WorkTag>();
+
+        public WorkTag? SelectedTag
+        {
+            get => _selectedTag;
+            set
+            {
+                if (SetProperty(ref _selectedTag, value))
+                {
+                    if (value != null)
+                    {
+                        _editingTagId = value.Id;
+                        TagName = value.Name;
+                        TagDescription = value.Description ?? "";
+                        OnPropertyChanged(nameof(SaveTagButtonText));
+                        StatusMessage = $"Selected tag: {value.Name}";
+                    }
+                    else
+                    {
+                        _editingTagId = 0;
+                        OnPropertyChanged(nameof(SaveTagButtonText));
+                    }
+                }
+            }
+        }
+
+        public string TagName
+        {
+            get => _tagName;
+            set => SetProperty(ref _tagName, value);
+        }
+
+        public string TagDescription
+        {
+            get => _tagDescription;
+            set => SetProperty(ref _tagDescription, value);
+        }
+
+        public string SaveTagButtonText => _editingTagId == 0 ? "+ Add Tag" : "💾 Update Tag";
+
         // Preset Color Swatches
         public ObservableCollection<string> ColorPresets { get; } = new ObservableCollection<string>
         {
@@ -116,6 +233,18 @@ namespace IdleWork.App.ViewModels
         public ICommand SelectColorCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand AddQuickRuleCommand { get; }
+        public ICommand OpenNewRuleDialogCommand { get; }
+        public ICommand SelectAllRulesCommand { get; }
+        public ICommand ClearAllRulesCommand { get; }
+
+        public ICommand SaveCategoryCommand { get; }
+        public ICommand DeleteCategoryCommand { get; }
+        public ICommand ClearCategoryFormCommand { get; }
+        public ICommand SelectCategoryColorCommand { get; }
+
+        public ICommand SaveTagCommand { get; }
+        public ICommand DeleteTagCommand { get; }
+        public ICommand ClearTagFormCommand { get; }
 
         public ProjectsViewModel(DatabaseService databaseService)
         {
@@ -127,6 +256,26 @@ namespace IdleWork.App.ViewModels
             SelectColorCommand = new RelayCommand(param => { if (param is string color && !string.IsNullOrEmpty(color)) ProjectColorHex = color; });
             RefreshCommand = new RelayCommand(async () => await InitializeAsync());
             AddQuickRuleCommand = new RelayCommand(AddQuickRule);
+            OpenNewRuleDialogCommand = new RelayCommand(() => RequestCreateNewRule?.Invoke(this, EventArgs.Empty));
+            SelectAllRulesCommand = new RelayCommand(() =>
+            {
+                foreach (var r in AvailableRules) r.IsSelected = true;
+                OnPropertyChanged(nameof(SelectedRulesSummaryText));
+            });
+            ClearAllRulesCommand = new RelayCommand(() =>
+            {
+                foreach (var r in AvailableRules) r.IsSelected = false;
+                OnPropertyChanged(nameof(SelectedRulesSummaryText));
+            });
+
+            SaveCategoryCommand = new RelayCommand(async () => await SaveCategoryAsync());
+            DeleteCategoryCommand = new RelayCommand(async () => await DeleteCategoryAsync());
+            ClearCategoryFormCommand = new RelayCommand(ClearCategoryForm);
+            SelectCategoryColorCommand = new RelayCommand(param => { if (param is string color && !string.IsNullOrEmpty(color)) CategoryColorHex = color; });
+
+            SaveTagCommand = new RelayCommand(async () => await SaveTagAsync());
+            DeleteTagCommand = new RelayCommand(async () => await DeleteTagAsync());
+            ClearTagFormCommand = new RelayCommand(ClearTagForm);
 
             _ = InitializeAsync();
         }
@@ -137,6 +286,8 @@ namespace IdleWork.App.ViewModels
         {
             await LoadProjectsAsync();
             await LoadRulesAsync();
+            await LoadCategoriesAsync();
+            await LoadTagsAsync();
         }
 
         public async Task LoadProjectsAsync()
@@ -171,13 +322,24 @@ namespace IdleWork.App.ViewModels
                 AvailableRules.Clear();
                 foreach (var item in items)
                 {
+                    item.SelectionChanged += (s, e) => OnPropertyChanged(nameof(SelectedRulesSummaryText));
                     AvailableRules.Add(item);
                 }
+                OnPropertyChanged(nameof(SelectedRulesSummaryText));
             }
             finally
             {
                 _loadLock.Release();
             }
+        }
+
+        public void OnNewRuleCreated(AutoTagRule newRule)
+        {
+            var item = new SelectableRule(newRule, isSelected: true, isNew: true);
+            item.SelectionChanged += (s, e) => OnPropertyChanged(nameof(SelectedRulesSummaryText));
+            AvailableRules.Add(item);
+            OnPropertyChanged(nameof(SelectedRulesSummaryText));
+            StatusMessage = $"Created and linked rule '{newRule.RuleName}'.";
         }
 
         private void SyncRuleSelections(string projectName)
@@ -187,6 +349,7 @@ namespace IdleWork.App.ViewModels
                 ruleItem.IsSelected = !string.IsNullOrEmpty(projectName) &&
                     string.Equals(ruleItem.Rule.TargetProject, projectName, StringComparison.OrdinalIgnoreCase);
             }
+            OnPropertyChanged(nameof(SelectedRulesSummaryText));
         }
 
         private void LoadProjectIntoForm(Project project)
@@ -246,6 +409,7 @@ namespace IdleWork.App.ViewModels
             {
                 r.IsSelected = false;
             }
+            OnPropertyChanged(nameof(SelectedRulesSummaryText));
 
             OnPropertyChanged(nameof(SaveButtonText));
             StatusMessage = "Form cleared for new project creation.";
@@ -323,6 +487,153 @@ namespace IdleWork.App.ViewModels
             Projects.Remove(p);
             ClearForm();
             StatusMessage = $"Deleted project: {p.Name}";
+        }
+
+        // [v0.2: Categories] Category CRUD methods
+        public async Task LoadCategoriesAsync()
+        {
+            await _loadLock.WaitAsync();
+            try
+            {
+                var list = await _databaseService.GetCategoriesAsync();
+                Categories.Clear();
+                foreach (var c in list)
+                    Categories.Add(c);
+            }
+            finally
+            {
+                _loadLock.Release();
+            }
+        }
+
+        private async Task SaveCategoryAsync()
+        {
+            string name = CategoryName.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                StatusMessage = "Please enter a category name.";
+                return;
+            }
+
+            if (_editingCategoryId != 0)
+            {
+                var existing = Categories.FirstOrDefault(c => c.Id == _editingCategoryId);
+                if (existing != null)
+                {
+                    existing.Name = name;
+                    existing.Description = CategoryDescription;
+                    existing.ColorHex = CategoryColorHex;
+                    await _databaseService.SaveCategoryAsync(existing);
+                    StatusMessage = $"Updated category: {existing.Name}";
+                }
+            }
+            else
+            {
+                var newCat = new WorkCategory
+                {
+                    Name = name,
+                    Description = CategoryDescription,
+                    ColorHex = CategoryColorHex
+                };
+                await _databaseService.SaveCategoryAsync(newCat);
+                Categories.Add(newCat);
+                StatusMessage = $"Created category: {newCat.Name}";
+            }
+
+            ClearCategoryForm();
+        }
+
+        private async Task DeleteCategoryAsync()
+        {
+            if (SelectedCategory == null) return;
+            var cat = SelectedCategory;
+            await _databaseService.DeleteCategoryAsync(cat.Id);
+            Categories.Remove(cat);
+            ClearCategoryForm();
+            StatusMessage = $"Deleted category: {cat.Name}";
+        }
+
+        public void ClearCategoryForm()
+        {
+            _editingCategoryId = 0;
+            _selectedCategory = null;
+            OnPropertyChanged(nameof(SelectedCategory));
+            CategoryName = "";
+            CategoryDescription = "";
+            CategoryColorHex = "#3B82F6";
+            OnPropertyChanged(nameof(SaveCategoryButtonText));
+        }
+
+        // [v0.2: Tags] Tag CRUD methods
+        public async Task LoadTagsAsync()
+        {
+            await _loadLock.WaitAsync();
+            try
+            {
+                var list = await _databaseService.GetTagsAsync();
+                Tags.Clear();
+                foreach (var t in list)
+                    Tags.Add(t);
+            }
+            finally
+            {
+                _loadLock.Release();
+            }
+        }
+
+        private async Task SaveTagAsync()
+        {
+            string name = TagName.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                StatusMessage = "Please enter a tag name.";
+                return;
+            }
+
+            if (_editingTagId != 0)
+            {
+                var existing = Tags.FirstOrDefault(t => t.Id == _editingTagId);
+                if (existing != null)
+                {
+                    existing.Name = name;
+                    existing.Description = TagDescription;
+                    await _databaseService.SaveTagAsync(existing);
+                    StatusMessage = $"Updated tag: {existing.Name}";
+                }
+            }
+            else
+            {
+                var newTag = new WorkTag
+                {
+                    Name = name,
+                    Description = TagDescription
+                };
+                await _databaseService.SaveTagAsync(newTag);
+                Tags.Add(newTag);
+                StatusMessage = $"Created tag: {newTag.Name}";
+            }
+
+            ClearTagForm();
+        }
+
+        private async Task DeleteTagAsync()
+        {
+            if (SelectedTag == null) return;
+            var tag = SelectedTag;
+            await _databaseService.DeleteTagAsync(tag.Id);
+            Tags.Remove(tag);
+            ClearTagForm();
+            StatusMessage = $"Deleted tag: {tag.Name}";
+        }
+
+        public void ClearTagForm()
+        {
+            _editingTagId = 0;
+            _selectedTag = null;
+            OnPropertyChanged(nameof(SelectedTag));
+            TagName = "";
+            TagDescription = "";
+            OnPropertyChanged(nameof(SaveTagButtonText));
         }
     }
 }

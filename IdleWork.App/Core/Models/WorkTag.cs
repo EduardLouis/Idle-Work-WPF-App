@@ -1,5 +1,6 @@
 // [v0.2: Tags] Predefined tag entity for multi-tagging activities
 using SQLite;
+using IdleWork.App.ViewModels;
 
 namespace IdleWork.App.Core.Models
 {

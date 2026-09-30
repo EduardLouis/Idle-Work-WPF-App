@@ -184,11 +184,21 @@
                                 <TextBlock Text="Target Project" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
                                 <ComboBox ItemsSource="{Binding AvailableProjects}" SelectedValue="{Binding NewTargetProject}" SelectedValuePath="Name" DisplayMemberPath="Name" Margin="0,0,0,10" />
 
-                                <TextBlock Text="Category (e.g. BIM, Development, Admin)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                                <TextBox Text="{Binding NewTargetCategory, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
+                                <TextBlock Text="Category" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <ComboBox IsEditable="True"
+                                          ItemsSource="{Binding AvailableCategories}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Name"
+                                          Text="{Binding NewTargetCategory, UpdateSourceTrigger=PropertyChanged}"
+                                          Margin="0,0,0,10" />
 
-                                <TextBlock Text="Tags (comma-separated, e.g. CAD, 3D)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                                <TextBox Text="{Binding NewTargetTags, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
+                                <TextBlock Text="Tags (e.g. Revit, 3D, Billable)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <ComboBox IsEditable="True"
+                                          ItemsSource="{Binding AvailableTags}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Name"
+                                          Text="{Binding NewTargetTags, UpdateSourceTrigger=PropertyChanged}"
+                                          Margin="0,0,0,16" />
 
                                 <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveRuleCommand}" Content="{Binding SaveButtonText}" HorizontalAlignment="Stretch" Padding="14,10" />
                             </StackPanel>
@@ -304,6 +314,208 @@
 
                             <Button Style="{StaticResource PrimaryButton}" Command="{Binding AddPriorityCommand}" Content="+ Add Priority Software" HorizontalAlignment="Stretch" Padding="14,10" />
                         </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 3: Categories -->
+            <TabItem Header="🏷️ Categories">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Categories List Card -->
+                    <Border Grid.Column="0" Style="{StaticResource CardBorder}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Work Categories" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,8" />
+
+                            <!-- Toolbar -->
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding ClearCategoryFormCommand}" Content="➕ New Category" Padding="8,4" FontSize="11" Margin="0,0,6,0" />
+                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding DeleteCategoryCommand}" Content="🗑 Delete Selected" Padding="8,4" FontSize="11" Foreground="#EF4444" />
+                            </WrapPanel>
+
+                            <!-- Categories ListView -->
+                            <ListView Grid.Row="2" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}"
+                                      Background="Transparent" BorderThickness="0"
+                                      helpers:ScrollHelper.BubbleMouseWheel="True">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#162032" CornerRadius="6" Padding="12,10" Margin="0,0,0,6" BorderBrush="#253347" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="32" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Color Bar -->
+                                                <Border Grid.Column="0" Width="4" CornerRadius="2" Background="{Binding ColorHex}" HorizontalAlignment="Left" />
+
+                                                <!-- Color Circle Badge -->
+                                                <Border Grid.Column="1" Width="18" Height="18" CornerRadius="9" Background="{Binding ColorHex}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+
+                                                <!-- Name & Description -->
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="6,0">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" />
+                                                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <!-- Category Badge -->
+                                                <Border Grid.Column="3" Background="#1E293B" CornerRadius="10" Padding="8,2" VerticalAlignment="Center">
+                                                    <TextBlock Text="Category" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Border>
+
+                    <!-- Category Form Card -->
+                    <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Category Details" FontSize="16" FontWeight="SemiBold" />
+                                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Command="{Binding ClearCategoryFormCommand}" Content="Clear / New" FontSize="10" Padding="6,2" />
+                                </Grid>
+
+                                <TextBlock Text="Category Name (e.g. BIM, Design, Admin, Meeting)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding CategoryName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
+
+                                <!-- Color Preset Picker -->
+                                <TextBlock Text="Color Tag" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <ItemsControl ItemsSource="{Binding ColorPresets}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Background="{Binding}" Width="24" Height="24" Margin="0,0,6,0" BorderThickness="0" Cursor="Hand"
+                                                        Command="{Binding DataContext.SelectCategoryColorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" CornerRadius="12" BorderBrush="#FFF" BorderThickness="1" />
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </WrapPanel>
+                                <TextBox Text="{Binding CategoryColorHex, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
+
+                                <TextBlock Text="Description (Optional)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding CategoryDescription, UpdateSourceTrigger=PropertyChanged}" Height="60" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,16" />
+
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCategoryCommand}" Content="{Binding SaveCategoryButtonText}" HorizontalAlignment="Stretch" Padding="14,10" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 4: Tags -->
+            <TabItem Header="🔖 Tags">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Tags List Card -->
+                    <Border Grid.Column="0" Style="{StaticResource CardBorder}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Work Activity Tags" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,8" />
+
+                            <!-- Toolbar -->
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding ClearTagFormCommand}" Content="➕ New Tag" Padding="8,4" FontSize="11" Margin="0,0,6,0" />
+                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding DeleteTagCommand}" Content="🗑 Delete Selected" Padding="8,4" FontSize="11" Foreground="#EF4444" />
+                            </WrapPanel>
+
+                            <!-- Tags ListView -->
+                            <ListView Grid.Row="2" ItemsSource="{Binding Tags}" SelectedItem="{Binding SelectedTag}"
+                                      Background="Transparent" BorderThickness="0"
+                                      helpers:ScrollHelper.BubbleMouseWheel="True">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#162032" CornerRadius="6" Padding="12,10" Margin="0,0,0,6" BorderBrush="#253347" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Tag Badge -->
+                                                <Border Grid.Column="0" Background="#1E293B" CornerRadius="4" Padding="8,3" VerticalAlignment="Center">
+                                                    <TextBlock FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="12">
+                                                        <Run Text="#" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                        <Run Text="{Binding Name}" />
+                                                    </TextBlock>
+                                                </Border>
+
+                                                <!-- Tag Description -->
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Border>
+
+                    <!-- Tag Form Card -->
+                    <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Tag Details" FontSize="16" FontWeight="SemiBold" />
+                                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Command="{Binding ClearTagFormCommand}" Content="Clear / New" FontSize="10" Padding="6,2" />
+                                </Grid>
+
+                                <TextBlock Text="Tag Name (e.g. Revit, AutoCAD, 3D, Billable)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding TagName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
+
+                                <TextBlock Text="Description (Optional)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding TagDescription, UpdateSourceTrigger=PropertyChanged}" Height="60" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,16" />
+
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveTagCommand}" Content="{Binding SaveTagButtonText}" HorizontalAlignment="Stretch" Padding="14,10" />
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
             </TabItem>

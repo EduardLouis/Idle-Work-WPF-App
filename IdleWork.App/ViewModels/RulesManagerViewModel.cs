@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using IdleWork.App.Core.Helpers;
 using IdleWork.App.Core.Models;
 using IdleWork.App.Core.Services;
 
@@ -34,6 +35,8 @@ namespace IdleWork.App.ViewModels
         public ObservableCollection<AutoTagRule> Rules { get; } = new ObservableCollection<AutoTagRule>();
         public ObservableCollection<SoftwarePriority> SoftwarePriorities { get; } = new ObservableCollection<SoftwarePriority>();
         public ObservableCollection<Project> AvailableProjects { get; } = new ObservableCollection<Project>();
+        public ObservableCollection<WorkCategory> AvailableCategories { get; } = new ObservableCollection<WorkCategory>();
+        public ObservableCollection<WorkTag> AvailableTags { get; } = new ObservableCollection<WorkTag>();
 
         public AutoTagRule? SelectedRule
         {
@@ -142,7 +145,127 @@ namespace IdleWork.App.ViewModels
         public ICommand MovePrioUpCommand { get; }
         public ICommand MovePrioDownCommand { get; }
 
+        // [v0.2: Categories & Tags in Smart Rules]
+        public ObservableCollection<WorkCategory> Categories => AvailableCategories;
+        public ObservableCollection<WorkTag> Tags => AvailableTags;
+
+        private WorkCategory? _selectedCategory;
+        private int _editingCategoryId = 0;
+        private string _categoryName = "";
+        private string _categoryDescription = "";
+        private string _categoryColorHex = "#3B82F6";
+
+        public WorkCategory? SelectedCategory
+        {
+            get => _selectedCategory;
+            set
+            {
+                if (SetProperty(ref _selectedCategory, value))
+                {
+                    if (value != null)
+                    {
+                        _editingCategoryId = value.Id;
+                        CategoryName = value.Name;
+                        CategoryDescription = value.Description ?? "";
+                        CategoryColorHex = value.ColorHex;
+                        OnPropertyChanged(nameof(SaveCategoryButtonText));
+                        StatusMessage = $"Selected category: {value.Name}";
+                    }
+                    else
+                    {
+                        _editingCategoryId = 0;
+                        OnPropertyChanged(nameof(SaveCategoryButtonText));
+                    }
+                }
+            }
+        }
+
+        public string CategoryName
+        {
+            get => _categoryName;
+            set => SetProperty(ref _categoryName, value);
+        }
+
+        public string CategoryDescription
+        {
+            get => _categoryDescription;
+            set => SetProperty(ref _categoryDescription, value);
+        }
+
+        public string CategoryColorHex
+        {
+            get => _categoryColorHex;
+            set => SetProperty(ref _categoryColorHex, value);
+        }
+
+        public string SaveCategoryButtonText => _editingCategoryId == 0 ? "+ Add Category" : "💾 Update Category";
+
+        private WorkTag? _selectedTag;
+        private int _editingTagId = 0;
+        private string _tagName = "";
+        private string _tagDescription = "";
+
+        public WorkTag? SelectedTag
+        {
+            get => _selectedTag;
+            set
+            {
+                if (SetProperty(ref _selectedTag, value))
+                {
+                    if (value != null)
+                    {
+                        _editingTagId = value.Id;
+                        TagName = value.Name;
+                        TagDescription = value.Description ?? "";
+                        OnPropertyChanged(nameof(SaveTagButtonText));
+                        StatusMessage = $"Selected tag: {value.Name}";
+                    }
+                    else
+                    {
+                        _editingTagId = 0;
+                        OnPropertyChanged(nameof(SaveTagButtonText));
+                    }
+                }
+            }
+        }
+
+        public string TagName
+        {
+            get => _tagName;
+            set => SetProperty(ref _tagName, value);
+        }
+
+        public string TagDescription
+        {
+            get => _tagDescription;
+            set => SetProperty(ref _tagDescription, value);
+        }
+
+        public string SaveTagButtonText => _editingTagId == 0 ? "+ Add Tag" : "💾 Update Tag";
+
+        public ObservableCollection<string> ColorPresets { get; } = new ObservableCollection<string>
+        {
+            "#3B82F6", // Blue
+            "#10B981", // Emerald
+            "#8B5CF6", // Purple
+            "#F59E0B", // Amber
+            "#06B6D4", // Cyan
+            "#EC4899", // Pink
+            "#EF4444", // Red
+            "#64748B"  // Slate
+        };
+
+        public ICommand SaveCategoryCommand { get; }
+        public ICommand DeleteCategoryCommand { get; }
+        public ICommand ClearCategoryFormCommand { get; }
+        public ICommand SelectCategoryColorCommand { get; }
+
+        public ICommand SaveTagCommand { get; }
+        public ICommand DeleteTagCommand { get; }
+        public ICommand ClearTagFormCommand { get; }
+
         private bool _isBatchUpdating = false;
+        private readonly System.Threading.SemaphoreSlim _rulesLoadLock = new System.Threading.SemaphoreSlim(1, 1);
 
         public RulesManagerViewModel(
             DatabaseService databaseService,
@@ -172,14 +295,145 @@ namespace IdleWork.App.ViewModels
             MovePrioUpCommand = new RelayCommand(async (param) => await MovePrioUpAsync(param as IList));
             MovePrioDownCommand = new RelayCommand(async (param) => await MovePrioDownAsync(param as IList));
 
+            SaveCategoryCommand = new RelayCommand(async () => await SaveCategoryAsync());
+            DeleteCategoryCommand = new RelayCommand(async () => await DeleteCategoryAsync());
+            ClearCategoryFormCommand = new RelayCommand(ClearCategoryForm);
+            SelectCategoryColorCommand = new RelayCommand(param => { if (param is string color && !string.IsNullOrEmpty(color)) CategoryColorHex = color; });
+
+            SaveTagCommand = new RelayCommand(async () => await SaveTagAsync());
+            DeleteTagCommand = new RelayCommand(async () => await DeleteTagAsync());
+            ClearTagFormCommand = new RelayCommand(ClearTagForm);
+
             RefreshAll();
+        }
+
+        private async Task SaveCategoryAsync()
+        {
+            string name = CategoryName.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                StatusMessage = "Please enter a category name.";
+                return;
+            }
+
+            if (_editingCategoryId != 0)
+            {
+                var existing = AvailableCategories.FirstOrDefault(c => c.Id == _editingCategoryId);
+                if (existing != null)
+                {
+                    existing.Name = name;
+                    existing.Description = CategoryDescription;
+                    existing.ColorHex = CategoryColorHex;
+                    await _databaseService.SaveCategoryAsync(existing);
+                    StatusMessage = $"Updated category: {existing.Name}";
+                }
+            }
+            else
+            {
+                var newCat = new WorkCategory
+                {
+                    Name = name,
+                    Description = CategoryDescription,
+                    ColorHex = CategoryColorHex
+                };
+                await _databaseService.SaveCategoryAsync(newCat);
+                AvailableCategories.Add(newCat);
+                StatusMessage = $"Created category: {newCat.Name}";
+            }
+
+            ClearCategoryForm();
+        }
+
+        private async Task DeleteCategoryAsync()
+        {
+            if (SelectedCategory == null) return;
+            var cat = SelectedCategory;
+            await _databaseService.DeleteCategoryAsync(cat.Id);
+            AvailableCategories.Remove(cat);
+            ClearCategoryForm();
+            StatusMessage = $"Deleted category: {cat.Name}";
+        }
+
+        public void ClearCategoryForm()
+        {
+            _editingCategoryId = 0;
+            _selectedCategory = null;
+            OnPropertyChanged(nameof(SelectedCategory));
+            CategoryName = "";
+            CategoryDescription = "";
+            CategoryColorHex = "#3B82F6";
+            OnPropertyChanged(nameof(SaveCategoryButtonText));
+        }
+
+        private async Task SaveTagAsync()
+        {
+            string name = TagName.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                StatusMessage = "Please enter a tag name.";
+                return;
+            }
+
+            if (_editingTagId != 0)
+            {
+                var existing = AvailableTags.FirstOrDefault(t => t.Id == _editingTagId);
+                if (existing != null)
+                {
+                    existing.Name = name;
+                    existing.Description = TagDescription;
+                    await _databaseService.SaveTagAsync(existing);
+                    StatusMessage = $"Updated tag: {existing.Name}";
+                }
+            }
+            else
+            {
+                var newTag = new WorkTag
+                {
+                    Name = name,
+                    Description = TagDescription
+                };
+                await _databaseService.SaveTagAsync(newTag);
+                AvailableTags.Add(newTag);
+                StatusMessage = $"Created tag: {newTag.Name}";
+            }
+
+            ClearTagForm();
+        }
+
+        private async Task DeleteTagAsync()
+        {
+            if (SelectedTag == null) return;
+            var tag = SelectedTag;
+            await _databaseService.DeleteTagAsync(tag.Id);
+            AvailableTags.Remove(tag);
+            ClearTagForm();
+            StatusMessage = $"Deleted tag: {tag.Name}";
+        }
+
+        public void ClearTagForm()
+        {
+            _editingTagId = 0;
+            _selectedTag = null;
+            OnPropertyChanged(nameof(SelectedTag));
+            TagName = "";
+            TagDescription = "";
+            OnPropertyChanged(nameof(SaveTagButtonText));
+        }
+
+        // [v0.004: AsyncRefactoring] Thread-safe async refresh
+        public async Task RefreshAllAsync()
+        {
+            await Task.WhenAll(
+                LoadRulesAsync(),
+                LoadPrioritiesAsync(),
+                LoadProjectsAsync(),
+                LoadCategoriesAndTagsAsync()
+            );
         }
 
         public void RefreshAll()
         {
-            LoadRulesAsync();
-            LoadPrioritiesAsync();
-            LoadProjectsAsync();
+            RefreshAllAsync().SafeFireAndForget("RulesManagerVM_RefreshAll");
         }
 
         private void SubscribeRule(AutoTagRule rule)
@@ -194,30 +448,46 @@ namespace IdleWork.App.ViewModels
 
         private async void OnRulePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            // [v0.2: SmartRulesToggle] Direct row CheckBox toggle syncs with DB and reloads classifier
-            if (e.PropertyName == nameof(AutoTagRule.IsEnabled) && sender is AutoTagRule rule && !_isBatchUpdating)
+            try
             {
-                await _databaseService.SaveRuleAsync(rule);
-                await _classifierService.RefreshRulesAsync();
-                StatusMessage = $"Rule '{rule.RuleName}' is now {(rule.IsEnabled ? "Enabled" : "Disabled")}.";
+                // [v0.2: SmartRulesToggle] Direct row CheckBox toggle syncs with DB and reloads classifier
+                if (e.PropertyName == nameof(AutoTagRule.IsEnabled) && sender is AutoTagRule rule && !_isBatchUpdating)
+                {
+                    await _databaseService.SaveRuleAsync(rule);
+                    await _classifierService.RefreshRulesAsync();
+                    StatusMessage = $"Rule '{rule.RuleName}' is now {(rule.IsEnabled ? "Enabled" : "Disabled")}.";
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Instance.LogError("RulesManagerVM_Toggle", ex.Message, ex);
             }
         }
 
-        public async void LoadRulesAsync()
+        public async Task LoadRulesAsync()
         {
-            foreach (var r in Rules)
-                UnsubscribeRule(r);
-
-            var rules = await _databaseService.GetRulesAsync();
-            Rules.Clear();
-            foreach (var r in rules)
+            await _rulesLoadLock.WaitAsync();
+            try
             {
-                SubscribeRule(r);
-                Rules.Add(r);
+                foreach (var r in Rules.ToList())
+                    UnsubscribeRule(r);
+
+                var rules = await _databaseService.GetRulesAsync();
+                Rules.Clear();
+                foreach (var r in rules)
+                {
+                    SubscribeRule(r);
+                    Rules.Add(r);
+                }
+            }
+            finally
+            {
+                _rulesLoadLock.Release();
             }
         }
 
-        public async void LoadPrioritiesAsync()
+        // [v0.004: AsyncRefactoring] Refactored to async Task
+        public async Task LoadPrioritiesAsync()
         {
             var prios = await _databaseService.GetSoftwarePrioritiesAsync();
             SoftwarePriorities.Clear();
@@ -226,7 +496,8 @@ namespace IdleWork.App.ViewModels
             RenumberPrioritiesInCollection();
         }
 
-        public async void LoadProjectsAsync()
+        // [v0.004: AsyncRefactoring] Refactored to async Task
+        public async Task LoadProjectsAsync()
         {
             var projects = await _databaseService.GetProjectsAsync();
             AvailableProjects.Clear();
@@ -235,6 +506,20 @@ namespace IdleWork.App.ViewModels
 
             if (string.IsNullOrEmpty(NewTargetProject) && AvailableProjects.Count > 0)
                 NewTargetProject = AvailableProjects[0].Name;
+        }
+
+        // [v0.004: AsyncRefactoring] Refactored to async Task
+        public async Task LoadCategoriesAndTagsAsync()
+        {
+            var cats = await _databaseService.GetCategoriesAsync();
+            AvailableCategories.Clear();
+            foreach (var c in cats)
+                AvailableCategories.Add(c);
+
+            var tags = await _databaseService.GetTagsAsync();
+            AvailableTags.Clear();
+            foreach (var t in tags)
+                AvailableTags.Add(t);
         }
 
         private void LoadRuleIntoForm(AutoTagRule rule)

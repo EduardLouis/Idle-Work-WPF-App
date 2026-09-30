@@ -30,6 +30,8 @@
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <TextBlock Text="{Binding TotalWorkHoursText, StringFormat='Total Logged: {0}'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <!-- [v0.004: CopyMarkdown] Quick Markdown export button -->
+                <Button Style="{StaticResource SecondaryButton}" Command="{Binding CopyMarkdownCommand}" Content="📋 Copy Markdown" Margin="0,0,8,0" />
                 <Button Style="{StaticResource PrimaryButton}" Command="{Binding ExportCsvCommand}" Content="⬇ Export to CSV" Margin="0,0,8,0" />
                 <Button Style="{StaticResource SecondaryButton}" Command="{Binding RefreshCommand}" Content="Refresh" />
             </StackPanel>
@@ -44,10 +46,10 @@
                 </Grid.RowDefinitions>
 
                 <!-- Column Headers -->
-                <Border Grid.Row="0" Background="#0F172A" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Border Grid.Row="0" Background="#0F172A" CornerRadius="6" Padding="12,10" Margin="0,0,0,8" BorderBrush="#1E293B" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2.5*" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
@@ -70,43 +72,71 @@
                     </Grid>
                 </Border>
 
-                <!-- Data Rows -->
-                <ListView Grid.Row="1" ItemsSource="{Binding Rows}" Background="Transparent" BorderThickness="0">
+                <!-- Data Rows with Fluent container stretch and column alignment -->
+                <ListView Grid.Row="1" ItemsSource="{Binding Rows}" Background="Transparent" BorderThickness="0"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,4" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Border x:Name="ContainerBorder" Background="#162032" CornerRadius="6" Padding="12,10" BorderBrush="#253347" BorderThickness="1">
+                                            <ContentPresenter HorizontalAlignment="Stretch" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ContainerBorder" Property="Background" Value="#1E293B" />
+                                                <Setter TargetName="ContainerBorder" Property="BorderBrush" Value="#334155" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="ContainerBorder" Property="Background" Value="#1E2D4A" />
+                                                <Setter TargetName="ContainerBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="#162032" CornerRadius="6" Padding="12,10" Margin="0,0,0,4" BorderBrush="#253347" BorderThickness="1">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="1.2*" />
-                                    </Grid.ColumnDefinitions>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2.5*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.2*" />
+                                </Grid.ColumnDefinitions>
 
-                                    <!-- Project & Color Pip -->
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Border Width="8" Height="8" CornerRadius="4" Background="{Binding ColorHex}" Margin="0,0,8,0" />
-                                        <TextBlock Text="{Binding ProjectName}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                                <!-- Project & Color Pip -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{Binding ColorHex}" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding ProjectName}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
 
-                                    <!-- Days -->
-                                    <TextBlock Grid.Column="1" Text="{Binding DayHours[0], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="2" Text="{Binding DayHours[1], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="3" Text="{Binding DayHours[2], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="4" Text="{Binding DayHours[3], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="5" Text="{Binding DayHours[4], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="6" Text="{Binding DayHours[5], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" />
-                                    <TextBlock Grid.Column="7" Text="{Binding DayHours[6], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" />
+                                <!-- Days -->
+                                <TextBlock Grid.Column="1" Text="{Binding DayHours[0], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="2" Text="{Binding DayHours[1], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="{Binding DayHours[2], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="4" Text="{Binding DayHours[3], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="5" Text="{Binding DayHours[4], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="6" Text="{Binding DayHours[5], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" />
+                                <TextBlock Grid.Column="7" Text="{Binding DayHours[6], StringFormat='{}{0:F1}h'}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" />
 
-                                    <!-- Total -->
-                                    <TextBlock Grid.Column="8" Text="{Binding TotalHours, StringFormat='{}{0:F1} hrs'}" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" />
-                                </Grid>
-                            </Border>
+                                <!-- Total -->
+                                <TextBlock Grid.Column="8" Text="{Binding TotalHours, StringFormat='{}{0:F1} hrs'}" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" />
+                            </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>

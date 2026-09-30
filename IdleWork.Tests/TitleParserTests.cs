@@ -48,10 +48,10 @@ namespace IdleWork.Tests
         [Fact]
         public void AppVersionHelper_ExposesMajorMinorAndBuildTimestamp()
         {
-            // [v0.2: Versioning] Assert dynamic version matches Directory.Build.props v0.2
-            Assert.Equal("0.2", AppVersionHelper.Version);
+            // [v0.004: Versioning] Assert dynamic version matches Directory.Build.props v0.004
+            Assert.Equal("0.004", AppVersionHelper.Version);
             Assert.False(string.IsNullOrWhiteSpace(AppVersionHelper.BuildTimestamp));
-            Assert.Contains("v0.2", AppVersionHelper.AppTitle);
+            Assert.Contains("v0.004", AppVersionHelper.AppTitle);
         }
     }
 }

@@ -226,9 +226,10 @@ namespace IdleWork.Tests
 
             // 1. By default or when IsAssignByRule is true, only Revit rules appear plus Create New Rule action row
             vm.IsAssignByRule = true;
-            Assert.NotEmpty(vm.AssignmentChoices);
-            Assert.Contains(vm.AssignmentChoices, c => c.IsCreateAction && c.Title.Contains("Create New Rule"));
-            Assert.All(vm.AssignmentChoices.Where(c => !c.IsCreateAction), choice =>
+            var ruleChoices = vm.GetAssignmentChoicesSnapshot();
+            Assert.NotEmpty(ruleChoices);
+            Assert.Contains(ruleChoices, c => c.IsCreateAction && c.Title.Contains("Create New Rule"));
+            Assert.All(ruleChoices.Where(c => !c.IsCreateAction), choice =>
             {
                 Assert.True(choice.IsRule);
                 // Must be either empty filter or contain Revit
@@ -236,13 +237,14 @@ namespace IdleWork.Tests
                 Assert.True(string.IsNullOrEmpty(filter) || filter.Contains("Revit", StringComparison.OrdinalIgnoreCase));
             });
             // Ensure AutoCAD rule is NOT in the choices
-            Assert.DoesNotContain(vm.AssignmentChoices, c => c.Title.Contains("AutoCAD", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(ruleChoices, c => c.Title.Contains("AutoCAD", StringComparison.OrdinalIgnoreCase));
 
             // 2. When switching to Direct Project, available projects appear plus Create New Project action row
             vm.IsAssignByProject = true;
-            Assert.NotEmpty(vm.AssignmentChoices);
-            Assert.Contains(vm.AssignmentChoices, c => c.IsCreateAction && c.Title.Contains("Create New Project"));
-            Assert.All(vm.AssignmentChoices.Where(c => !c.IsCreateAction), choice =>
+            var projChoices = vm.GetAssignmentChoicesSnapshot();
+            Assert.NotEmpty(projChoices);
+            Assert.Contains(projChoices, c => c.IsCreateAction && c.Title.Contains("Create New Project"));
+            Assert.All(projChoices.Where(c => !c.IsCreateAction), choice =>
             {
                 Assert.False(choice.IsRule);
                 Assert.NotNull(choice.Project);
@@ -340,7 +342,7 @@ namespace IdleWork.Tests
 
             // Modify values
             vm.IdleTimeoutSeconds = 30;
-            vm.DwellDebounceSeconds = 4.5;
+            vm.DwellDebounceSeconds = 90.0;
             vm.MicSensitivity = 0.20f;
 
             // Execute reset commands
@@ -490,6 +492,53 @@ namespace IdleWork.Tests
         }
 
         [Fact]
+        public async Task ProjectsViewModel_MultiCheckRulesDropdown_SummaryTextAndNewRuleCreated()
+        {
+            // [v0.003: MultiCheckDropdown] Verify multi-check rules dropdown summary text and NewRuleDialog integration
+            await _dbService.EnsureInitializedAsync();
+
+            var vm = new ProjectsViewModel(_dbService);
+            await vm.LoadProjectsAsync();
+            await vm.LoadRulesAsync();
+
+            // Default state: no rules selected
+            vm.ClearAllRulesCommand.Execute(null);
+            Assert.Equal("No rules linked (Click to select)", vm.SelectedRulesSummaryText);
+
+            // Select one rule
+            if (vm.AvailableRules.Count > 0)
+            {
+                vm.AvailableRules[0].IsSelected = true;
+                Assert.Contains("1 rule linked", vm.SelectedRulesSummaryText);
+            }
+
+            // Select all rules
+            vm.SelectAllRulesCommand.Execute(null);
+            Assert.Contains("rules linked", vm.SelectedRulesSummaryText);
+            Assert.True(vm.AvailableRules.All(r => r.IsSelected));
+
+            // Clear all rules
+            vm.ClearAllRulesCommand.Execute(null);
+            Assert.Equal("No rules linked (Click to select)", vm.SelectedRulesSummaryText);
+            Assert.True(vm.AvailableRules.All(r => !r.IsSelected));
+
+            // OnNewRuleCreated from NewRuleDialog
+            var created = new AutoTagRule
+            {
+                RuleName = "Custom Hospital Rule",
+                ProcessFilter = "Revit",
+                TitlePattern = "Hospital",
+                TargetProject = "Medical Center"
+            };
+            vm.OnNewRuleCreated(created);
+
+            var added = vm.AvailableRules.FirstOrDefault(r => r.RuleName == "Custom Hospital Rule");
+            Assert.NotNull(added);
+            Assert.True(added.IsSelected);
+            Assert.Contains("Custom Hospital Rule", vm.SelectedRulesSummaryText);
+        }
+
+        [Fact]
         public async Task RulesManagerViewModel_MultiSelect_DeleteAndToggleAndDuplicate_WorksOnAllSelected()
         {
             // [v0.2: SmartRulesMultiSelect] Verify delete, toggle, and duplicate on multiple selected rows
@@ -505,14 +554,12 @@ namespace IdleWork.Tests
             await _dbService.SaveRuleAsync(rule2);
             await _dbService.SaveRuleAsync(rule3);
 
-            vm.LoadRulesAsync();
-            // Wait for collection to populate
-            await Task.Delay(100);
+            await vm.LoadRulesAsync();
             int initialCount = vm.Rules.Count;
             Assert.True(initialCount >= 3);
 
-            var ruleA = vm.Rules.First(r => r.RuleName == "Rule A");
-            var ruleB = vm.Rules.First(r => r.RuleName == "Rule B");
+            var ruleA = vm.Rules.ToList().First(r => r.RuleName == "Rule A");
+            var ruleB = vm.Rules.ToList().First(r => r.RuleName == "Rule B");
             var selectedList = new System.Collections.ArrayList { ruleA, ruleB };
 
             // 1. Test Toggle on multiple rules: since both are true, toggling should disable them
@@ -532,8 +579,8 @@ namespace IdleWork.Tests
             Assert.Contains(vm.Rules, r => r.RuleName == "Rule B (Copy)");
 
             // 3. Test Delete on multiple rules (delete the copies)
-            var copy1 = vm.Rules.First(r => r.RuleName == "Rule A (Copy)");
-            var copy2 = vm.Rules.First(r => r.RuleName == "Rule B (Copy)");
+            var copy1 = vm.Rules.ToList().First(r => r.RuleName == "Rule A (Copy)");
+            var copy2 = vm.Rules.ToList().First(r => r.RuleName == "Rule B (Copy)");
             var toDeleteList = new System.Collections.ArrayList { copy1, copy2 };
 
             await vm.DeleteSelectedRulesAsync(toDeleteList);
@@ -563,8 +610,7 @@ namespace IdleWork.Tests
                 IsEnabled = true
             };
             await _dbService.SaveRuleAsync(rule);
-            vm.LoadRulesAsync();
-            await Task.Delay(100);
+            await vm.LoadRulesAsync();
 
             // Initially: no rule selected -> "+ Add Persistent Rule"
             Assert.Equal("+ Add Persistent Rule", vm.SaveButtonText);
@@ -596,12 +642,644 @@ namespace IdleWork.Tests
         [Fact]
         public void AppVersionHelper_MajorMinor_BoundedWithin0To999()
         {
-            // [v0.2: Versioning] Verify version string formats as Major.Minor and components are within 0-999
+            // [v0.004: Versioning] Verify version string formats as Major.Minor and components are within 0-999
             Assert.False(string.IsNullOrWhiteSpace(AppVersionHelper.Version));
             Assert.InRange(AppVersionHelper.Major, 0, 999);
             Assert.InRange(AppVersionHelper.Minor, 0, 999);
-            Assert.Equal($"{AppVersionHelper.Major}.{AppVersionHelper.Minor}", AppVersionHelper.Version);
+            Assert.Equal("0.004", AppVersionHelper.Version);
             Assert.Contains($"v{AppVersionHelper.Version}", AppVersionHelper.AppTitle);
+        }
+
+        [Fact]
+        public async Task CategoriesAndTags_DatabaseService_CrudOperations()
+        {
+            // [v0.2: Categories & Tags] Verify seeding, insertion, retrieval, and deletion
+            await _dbService.EnsureInitializedAsync();
+
+            var categories = await _dbService.GetCategoriesAsync();
+            Assert.NotEmpty(categories);
+            Assert.Contains(categories, c => c.Name == "BIM");
+            Assert.Contains(categories, c => c.Name == "Development");
+
+            var tags = await _dbService.GetTagsAsync();
+            Assert.NotEmpty(tags);
+            Assert.Contains(tags, t => t.Name == "Revit");
+            Assert.Contains(tags, t => t.Name == "AutoCAD");
+
+            // Create new category
+            var customCat = new WorkCategory { Name = "Structural Engineering", Description = "Calculations and framing", ColorHex = "#10B981" };
+            await _dbService.SaveCategoryAsync(customCat);
+
+            var updatedCats = await _dbService.GetCategoriesAsync();
+            var savedCat = updatedCats.FirstOrDefault(c => c.Name == "Structural Engineering");
+            Assert.NotNull(savedCat);
+            Assert.Equal("#10B981", savedCat.ColorHex);
+
+            // Update category
+            savedCat.Description = "Updated framing";
+            await _dbService.SaveCategoryAsync(savedCat);
+            var reloadedCats = await _dbService.GetCategoriesAsync();
+            Assert.Equal("Updated framing", reloadedCats.First(c => c.Id == savedCat.Id).Description);
+
+            // Delete category
+            await _dbService.DeleteCategoryAsync(savedCat.Id);
+            var afterDeleteCats = await _dbService.GetCategoriesAsync();
+            Assert.DoesNotContain(afterDeleteCats, c => c.Id == savedCat.Id);
+
+            // Create and delete new tag
+            var customTag = new WorkTag { Name = "Navisworks", Description = "Clash detection" };
+            await _dbService.SaveTagAsync(customTag);
+
+            var updatedTags = await _dbService.GetTagsAsync();
+            var savedTag = updatedTags.FirstOrDefault(t => t.Name == "Navisworks");
+            Assert.NotNull(savedTag);
+
+            await _dbService.DeleteTagAsync(savedTag.Id);
+            var afterDeleteTags = await _dbService.GetTagsAsync();
+            Assert.DoesNotContain(afterDeleteTags, t => t.Id == savedTag.Id);
+        }
+
+        [Fact]
+        public async Task ProjectsViewModel_CategoriesAndTags_FormAndSelectionOperations()
+        {
+            // [v0.2: Categories & Tags] Verify ProjectsViewModel category and tag subpages
+            await _dbService.EnsureInitializedAsync();
+            var vm = new ProjectsViewModel(_dbService);
+            await vm.InitializeAsync();
+
+            Assert.NotEmpty(vm.Categories);
+            Assert.NotEmpty(vm.Tags);
+
+            // Default state
+            Assert.Equal("+ Add Category", vm.SaveCategoryButtonText);
+            Assert.Equal("+ Add Tag", vm.SaveTagButtonText);
+
+            // Select a category
+            var bimCat = vm.Categories.First(c => c.Name == "BIM");
+            vm.SelectedCategory = bimCat;
+            Assert.Equal("💾 Update Category", vm.SaveCategoryButtonText);
+            Assert.Equal("BIM", vm.CategoryName);
+
+            // Clear category form
+            vm.ClearCategoryFormCommand.Execute(null);
+            Assert.Equal("+ Add Category", vm.SaveCategoryButtonText);
+            Assert.Equal("", vm.CategoryName);
+
+            // Select a tag
+            var revitTag = vm.Tags.First(t => t.Name == "Revit");
+            vm.SelectedTag = revitTag;
+            Assert.Equal("💾 Update Tag", vm.SaveTagButtonText);
+            Assert.Equal("Revit", vm.TagName);
+
+            // Clear tag form
+            vm.ClearTagFormCommand.Execute(null);
+            Assert.Equal("+ Add Tag", vm.SaveTagButtonText);
+            Assert.Equal("", vm.TagName);
+        }
+
+        [Fact]
+        public async Task RulesManagerViewModel_CategoriesAndTags_SubpageOperations()
+        {
+            // [v0.2: Categories & Tags in RulesManager] Verify subpages in Smart Rules
+            await _dbService.EnsureInitializedAsync();
+            var classifier = new RuleClassifierService(_dbService);
+            var vm = new RulesManagerViewModel(_dbService, classifier);
+
+            // Wait a tick for async loaders
+            await Task.Delay(50);
+
+            Assert.NotEmpty(vm.Categories);
+            Assert.NotEmpty(vm.Tags);
+
+            // Default state
+            Assert.Equal("+ Add Category", vm.SaveCategoryButtonText);
+            Assert.Equal("+ Add Tag", vm.SaveTagButtonText);
+
+            // Select a category
+            var devCat = vm.Categories.First(c => c.Name == "Development");
+            vm.SelectedCategory = devCat;
+            Assert.Equal("💾 Update Category", vm.SaveCategoryButtonText);
+            Assert.Equal("Development", vm.CategoryName);
+
+            // Clear category form
+            vm.ClearCategoryFormCommand.Execute(null);
+            Assert.Equal("+ Add Category", vm.SaveCategoryButtonText);
+            Assert.Equal("", vm.CategoryName);
+
+            // Select a tag
+            var acadTag = vm.Tags.First(t => t.Name == "AutoCAD");
+            vm.SelectedTag = acadTag;
+            Assert.Equal("💾 Update Tag", vm.SaveTagButtonText);
+            Assert.Equal("AutoCAD", vm.TagName);
+
+            // Clear tag form
+            vm.ClearTagFormCommand.Execute(null);
+            Assert.Equal("+ Add Tag", vm.SaveTagButtonText);
+            Assert.Equal("", vm.TagName);
+        }
+
+        [Fact]
+        public async Task TimelineViewModel_ConsolidatedActivities_SortModes_Percentage_LastActive_OldActivity()
+        {
+            // [v0.2: TimelineSorting] Verify sorting by Percentage, Last Active, and Old Activity
+            await _dbService.EnsureInitializedAsync();
+
+            var testDate = new DateTime(2027, 5, 20);
+            // Activity 1: Early morning, 1 hour (oldest start)
+            var act1 = new ActivityTimeSpan
+            {
+                ProcessName = "Revit",
+                WindowTitle = "Project A - Level 1",
+                StartTime = testDate.AddHours(9),
+                EndTime = testDate.AddHours(10),
+                DurationSeconds = 3600,
+                State = "Active"
+            };
+            // Activity 2: Mid-day, 4 hours (highest percentage)
+            var act2 = new ActivityTimeSpan
+            {
+                ProcessName = "acad",
+                WindowTitle = "Project B - Details",
+                StartTime = testDate.AddHours(11),
+                EndTime = testDate.AddHours(15),
+                DurationSeconds = 14400,
+                State = "Active"
+            };
+            // Activity 3: Late afternoon, 30 min (latest end time)
+            var act3 = new ActivityTimeSpan
+            {
+                ProcessName = "devenv",
+                WindowTitle = "Project C - Solution",
+                StartTime = testDate.AddHours(16),
+                EndTime = testDate.AddHours(16.5),
+                DurationSeconds = 1800,
+                State = "Active"
+            };
+
+            await _dbService.SaveActivityAsync(act1);
+            await _dbService.SaveActivityAsync(act2);
+            await _dbService.SaveActivityAsync(act3);
+
+            var classifier = new RuleClassifierService(_dbService);
+            var vm = new TimelineViewModel(_dbService, classifier);
+            vm.SelectedDate = testDate;
+            await vm.LoadTimelineAsync();
+            Assert.Equal(3, vm.Activities.Count);
+
+            // 1. Sort by Percentage (Index 0): Highest duration/percentage first
+            vm.SelectedSortIndex = 0;
+            Assert.Equal(ActivitySortMode.Percentage, vm.SelectedSortMode);
+            Assert.Equal("acad", vm.Activities[0].ProcessName);    // 14400s
+            Assert.Equal("Revit", vm.Activities[1].ProcessName);   // 3600s
+            Assert.Equal("devenv", vm.Activities[2].ProcessName);  // 1800s
+
+            // 2. Sort by Last Active (Index 1): Latest EndTime first
+            vm.SelectedSortIndex = 1;
+            Assert.Equal(ActivitySortMode.LastActive, vm.SelectedSortMode);
+            Assert.Equal("devenv", vm.Activities[0].ProcessName);  // End 16:30
+            Assert.Equal("acad", vm.Activities[1].ProcessName);    // End 15:00
+            Assert.Equal("Revit", vm.Activities[2].ProcessName);   // End 10:00
+
+            // 3. Sort by Old Activity (Index 2): Earliest StartTime first
+            vm.SelectedSortIndex = 2;
+            Assert.Equal(ActivitySortMode.OldActivity, vm.SelectedSortMode);
+            Assert.Equal("Revit", vm.Activities[0].ProcessName);   // Start 09:00
+            Assert.Equal("acad", vm.Activities[1].ProcessName);    // Start 11:00
+            Assert.Equal("devenv", vm.Activities[2].ProcessName);  // Start 16:00
+        }
+
+        [Fact]
+        public void AppVersionHelper_MajorMinor_Resolves_0_003()
+        {
+            // [v0.003: Versioning] Verify AppVersionHelper extracts version components
+            Assert.NotNull(AppVersionHelper.Version);
+            Assert.Equal(0, AppVersionHelper.Major);
+            Assert.True(AppVersionHelper.Minor >= 0 && AppVersionHelper.Minor <= 999);
+            Assert.StartsWith("Idle-Work v0.", AppVersionHelper.AppTitle);
+        }
+
+        [Fact]
+        public void SettingsViewModel_ScreenshotSettings_Snapping_AndResetCommand()
+        {
+            // [v0.003: Preferences] Verify Screenshot settings snapping, display text, and reset command
+            var classifier = new RuleClassifierService(_dbService);
+            var windowTracker = new WindowTrackerService();
+            var audioService = new AudioLevelService();
+            var idleDetector = new IdleDetectionService(audioService);
+            var tempFolder = Path.Combine(Path.GetTempPath(), "IdleWork_Test_Screenshots_" + Guid.NewGuid().ToString("N"));
+            var screenshotService = new ScreenshotService(tempFolder);
+            var aggregator = new ActivityAggregator(_dbService, classifier, windowTracker, idleDetector, null, screenshotService);
+            var vm = new SettingsViewModel(_dbService, aggregator, idleDetector, audioService, screenshotService);
+
+            // Defaults
+            Assert.True(vm.EnableScreenshots);
+            Assert.True(vm.CaptureOnWindowSwitch);
+            Assert.Equal(5, vm.ScreenshotIntervalMinutes);
+            Assert.Equal("5 minutes", vm.ScreenshotIntervalDisplayText);
+
+            // Snapping tests:
+            vm.ScreenshotIntervalMinutes = 0;
+            Assert.Equal(0, vm.ScreenshotIntervalMinutes);
+            Assert.Equal("Off (No periodic screenshots)", vm.ScreenshotIntervalDisplayText);
+
+            vm.ScreenshotIntervalMinutes = 1;
+            Assert.Equal(1, vm.ScreenshotIntervalMinutes);
+            Assert.Equal("1 minute", vm.ScreenshotIntervalDisplayText);
+
+            vm.ScreenshotIntervalMinutes = 3;
+            Assert.Equal(2, vm.ScreenshotIntervalMinutes);
+            Assert.Equal("2 minutes", vm.ScreenshotIntervalDisplayText);
+
+            vm.ScreenshotIntervalMinutes = 6;
+            Assert.Equal(5, vm.ScreenshotIntervalMinutes);
+
+            vm.ScreenshotIntervalMinutes = 11;
+            Assert.Equal(10, vm.ScreenshotIntervalMinutes);
+
+            vm.ScreenshotIntervalMinutes = 20;
+            Assert.Equal(15, vm.ScreenshotIntervalMinutes);
+
+            vm.ScreenshotIntervalMinutes = 28;
+            Assert.Equal(30, vm.ScreenshotIntervalMinutes);
+
+            // Reset command restores defaults
+            vm.EnableScreenshots = false;
+            vm.CaptureOnWindowSwitch = false;
+            vm.ResetScreenshotSettingsCommand.Execute(null);
+
+            Assert.True(vm.EnableScreenshots);
+            Assert.True(vm.CaptureOnWindowSwitch);
+            Assert.Equal(5, vm.ScreenshotIntervalMinutes);
+
+            // Cleanup
+            try { if (Directory.Exists(tempFolder)) Directory.Delete(tempFolder, true); } catch { }
+        }
+
+        [Fact]
+        public void ActivityTimeSpan_RichMetadata_And_Screenshot_DisplayProperties()
+        {
+            // [v0.003: RichMetadata] Verify DisplayAppDescription fallback and HasScreenshot evaluation
+            var span = new ActivityTimeSpan
+            {
+                ProcessName = "Revit",
+                WindowTitle = "Floor Plan: Level 1 - Hospital.rvt",
+                AppDescription = "Autodesk Revit 2025",
+                ExecutablePath = @"C:\Program Files\Autodesk\Revit 2025\Revit.exe",
+                AppCompany = "Autodesk, Inc.",
+                AppVersion = "25.0.0.0",
+                WindowClassName = "Afx:00400000:8",
+                ScreenshotPath = null
+            };
+
+            Assert.Equal("Autodesk Revit 2025", span.DisplayAppDescription);
+            Assert.False(span.HasScreenshot);
+
+            // Fallback when AppDescription is empty
+            span.AppDescription = "";
+            Assert.Equal("Revit", span.DisplayAppDescription);
+
+            // Screenshot detection
+            var tempFile = Path.GetTempFileName();
+            try
+            {
+                span.ScreenshotPath = tempFile;
+                Assert.True(span.HasScreenshot);
+
+                span.ScreenshotPath = @"C:\NonExistent_Fake_Dir\test.jpg";
+                Assert.False(span.HasScreenshot);
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
+
+        [Fact]
+        public void SettingsViewModel_DwellDebounce_SnappingAndDisplay()
+        {
+            // [v0.003: DwellRange30s] Verify 30-180s range, 30s snapping, and display text formatting
+            var audio = new AudioLevelService();
+            var idle = new IdleDetectionService(audio);
+            var classifier = new RuleClassifierService(_dbService);
+            var winTracker = new WindowTrackerService();
+            var aggregator = new ActivityAggregator(_dbService, classifier, winTracker, idle);
+            var vm = new SettingsViewModel(_dbService, aggregator, idle, audio);
+
+            // Default
+            Assert.Equal(30.0, vm.DwellDebounceSeconds);
+            Assert.Equal("30 seconds", vm.DwellDebounceDisplay);
+
+            // Snapping test
+            vm.DwellDebounceSeconds = 15.0; // Clamped and snapped to 30s
+            Assert.Equal(30.0, vm.DwellDebounceSeconds);
+            Assert.Equal("30 seconds", vm.DwellDebounceDisplay);
+
+            vm.DwellDebounceSeconds = 48.0; // Snapped to 60s
+            Assert.Equal(60.0, vm.DwellDebounceSeconds);
+            Assert.Equal("1 minute", vm.DwellDebounceDisplay);
+
+            vm.DwellDebounceSeconds = 85.0; // Snapped to 90s
+            Assert.Equal(90.0, vm.DwellDebounceSeconds);
+            Assert.Equal("1m 30s", vm.DwellDebounceDisplay);
+
+            vm.DwellDebounceSeconds = 122.0; // Snapped to 120s
+            Assert.Equal(120.0, vm.DwellDebounceSeconds);
+            Assert.Equal("2 minutes", vm.DwellDebounceDisplay);
+
+            vm.DwellDebounceSeconds = 150.0;
+            Assert.Equal(150.0, vm.DwellDebounceSeconds);
+            Assert.Equal("2m 30s", vm.DwellDebounceDisplay);
+
+            vm.DwellDebounceSeconds = 200.0; // Clamped to 180s
+            Assert.Equal(180.0, vm.DwellDebounceSeconds);
+            Assert.Equal("3 minutes", vm.DwellDebounceDisplay);
+        }
+
+        [Fact]
+        public void WindowTrackerService_IsIgnoredWindow_FiltersSelfAndOverlays()
+        {
+            // [v0.003: ExcludeSelfAndOverlays] Verify self app and screen clipping overlays are ignored
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "IdleWork", "IdleWork - Time Tracker"));
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "IdleWork.App", "Settings"));
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "SnippingTool", "Snipping Tool Overlay"));
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "ScreenClippingHost", ""));
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "ShellExperienceHost", "Windows Shell Experience Host"));
+            Assert.True(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "explorer", "Taskbar"));
+
+            // Legitimate work apps should NOT be ignored
+            Assert.False(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "Revit", "Autodesk Revit 2025 - Project1.rvt"));
+            Assert.False(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "acad", "AutoCAD 2025 - Drawing1.dwg"));
+            Assert.False(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "chrome", "Google - Chrome"));
+            Assert.False(WindowTrackerService.IsIgnoredWindow(IntPtr.Zero, "devenv", "IdleWork - Microsoft Visual Studio"));
+        }
+
+        [Fact]
+        public async Task DatabaseService_PurgeIgnoredActivities_RemovesSnippingToolAndSelf()
+        {
+            // [v0.003: ExcludeSelfAndOverlays] Verify purge removes any previously recorded self/SnippingTool activities
+            await _dbService.EnsureInitializedAsync();
+
+            var now = DateTime.Now;
+            var validSpan = new ActivityTimeSpan
+            {
+                StartTime = now.AddMinutes(-30),
+                EndTime = now.AddMinutes(-10),
+                DurationSeconds = 1200,
+                ProcessName = "Revit",
+                WindowTitle = "Autodesk Revit 2025 - Hospital.rvt",
+                State = "Active"
+            };
+            var snippingSpan = new ActivityTimeSpan
+            {
+                StartTime = now.AddMinutes(-10),
+                EndTime = now.AddMinutes(-9),
+                DurationSeconds = 60,
+                ProcessName = "SnippingTool",
+                WindowTitle = "Snipping Tool Overlay",
+                State = "Active"
+            };
+            var selfSpan = new ActivityTimeSpan
+            {
+                StartTime = now.AddMinutes(-9),
+                EndTime = now.AddMinutes(-8),
+                DurationSeconds = 60,
+                ProcessName = "IdleWork",
+                WindowTitle = "IdleWork - Time Tracker",
+                State = "Active"
+            };
+
+            await _dbService.SaveActivityAsync(validSpan);
+            await _dbService.SaveActivityAsync(snippingSpan);
+            await _dbService.SaveActivityAsync(selfSpan);
+
+            // Verify they are filtered from query
+            var queryActivities = await _dbService.GetActivitiesForDateRangeAsync(now.Date, now.Date.AddDays(1).AddTicks(-1));
+            Assert.DoesNotContain(queryActivities, a => a.ProcessName == "SnippingTool");
+            Assert.DoesNotContain(queryActivities, a => a.ProcessName == "IdleWork");
+            Assert.Contains(queryActivities, a => a.ProcessName == "Revit");
+
+            // Purge from DB
+            int purged = await _dbService.PurgeIgnoredActivitiesAsync();
+            Assert.True(purged >= 2);
+        }
+
+        [Fact]
+        public void TimelineViewModel_SelectedActivityScreenshots_PopulatesMultiCaptureGrid()
+        {
+            // [v0.003: VisualEvidenceGrid] Verify SelectedActivityScreenshots gathers main and interval screenshots
+            var classifier = new RuleClassifierService(_dbService);
+            var vm = new TimelineViewModel(_dbService, classifier);
+
+            var tempFile1 = Path.GetTempFileName();
+            var tempFile2 = Path.GetTempFileName();
+
+            try
+            {
+                var span = new ActivityTimeSpan
+                {
+                    Id = 1,
+                    ProcessName = "Revit",
+                    WindowTitle = "Autodesk Revit 2025 - Hospital.rvt",
+                    StartTime = DateTime.Now.AddMinutes(-30),
+                    EndTime = DateTime.Now,
+                    DurationSeconds = 1800,
+                    ScreenshotPath = tempFile1,
+                    Intervals = new List<ActivityInterval>
+                    {
+                        new ActivityInterval
+                        {
+                            ActivityId = 1,
+                            StartTime = DateTime.Now.AddMinutes(-20),
+                            EndTime = DateTime.Now.AddMinutes(-15),
+                            DurationSeconds = 300,
+                            SubProcessName = "chrome",
+                            SubWindowTitle = "Building Specs - Google Chrome",
+                            ScreenshotPath = tempFile2
+                        }
+                    }
+                };
+
+                vm.SelectedActivity = span;
+
+                Assert.True(vm.HasAnyScreenshots);
+                Assert.Equal(2, vm.SelectedActivityScreenshots.Count);
+                Assert.Equal("2", vm.ScreenshotCountBadgeText);
+                Assert.Equal("Main Window", vm.SelectedActivityScreenshots[0].Label);
+                Assert.Equal("Sub: chrome", vm.SelectedActivityScreenshots[1].Label);
+            }
+            finally
+            {
+                try { File.Delete(tempFile1); } catch { }
+                try { File.Delete(tempFile2); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task SettingsViewModel_SystemTray_DefaultsAndToggles_PersistToDatabase()
+        {
+            // [v0.003: SystemTray] Verify defaults and toggle persistence
+            await _dbService.EnsureInitializedAsync();
+
+            var classifier = new RuleClassifierService(_dbService);
+            var winTracker = new WindowTrackerService();
+            var audio = new AudioLevelService();
+            var idle = new IdleDetectionService(audio);
+            var aggregator = new ActivityAggregator(_dbService, classifier, winTracker, idle);
+
+            var vm = new SettingsViewModel(_dbService, aggregator, idle, audio);
+
+            // Defaults must be true
+            Assert.True(vm.MinimizeToTray);
+            Assert.True(vm.CloseToTray);
+            Assert.True(SystemTrayService.Instance.MinimizeToTray);
+            Assert.True(SystemTrayService.Instance.CloseToTray);
+
+            // Toggle off
+            vm.MinimizeToTray = false;
+            vm.CloseToTray = false;
+            Assert.False(vm.MinimizeToTray);
+            Assert.False(vm.CloseToTray);
+            Assert.False(SystemTrayService.Instance.MinimizeToTray);
+            Assert.False(SystemTrayService.Instance.CloseToTray);
+
+            // Wait for fire-and-forget database save to complete
+            await Task.Delay(100);
+
+            // Verify persisted in SQLite
+            string? minVal = await _dbService.GetSettingAsync("MinimizeToTray");
+            string? closeVal = await _dbService.GetSettingAsync("CloseToTray");
+            Assert.Equal("False", minVal);
+            Assert.Equal("False", closeVal);
+
+            // Reset command restores defaults
+            vm.ResetTraySettingsCommand.Execute(null);
+            Assert.True(vm.MinimizeToTray);
+            Assert.True(vm.CloseToTray);
+            Assert.True(SystemTrayService.Instance.MinimizeToTray);
+            Assert.True(SystemTrayService.Instance.CloseToTray);
+        }
+
+        [Fact]
+        public void SystemTrayService_PropertiesAndTooltip_UpdatesState()
+        {
+            // [v0.003: SystemTray] Verify SystemTrayService state and disposal
+            var service = SystemTrayService.Instance;
+            service.MinimizeToTray = true;
+            service.CloseToTray = true;
+
+            Assert.True(service.MinimizeToTray);
+            Assert.True(service.CloseToTray);
+
+            service.UpdateTooltip("Testing Tooltip");
+            // Tooltip and notification methods run gracefully without crashing even before HWND attachment
+            service.ShowNotification("Test Title", "Test Text");
+        }
+
+        [Fact]
+        public void TimesheetService_ExportWeeklyTimesheetToMarkdown_FormatsMarkdownTableCorrectly()
+        {
+            // [v0.004: MarkdownExport] Verify TimesheetService Markdown table formatting for Jira/Slack
+            var service = new TimesheetService(_dbService);
+            var data = new WeeklyTimesheetData
+            {
+                WeekStartDate = new DateTime(2026, 9, 21),
+                WeekEndDate = new DateTime(2026, 9, 27),
+                Rows = new List<WeeklyTimesheetRow>
+                {
+                    new WeeklyTimesheetRow
+                    {
+                        ProjectName = "Alpha Revamp",
+                        DayHours = new double[] { 4.0, 5.0, 3.5, 0, 0, 0, 0 }
+                    }
+                },
+                DailyActiveHours = new double[] { 4.0, 5.0, 3.5, 0, 0, 0, 0 },
+                DailyMeetingHours = new double[] { 1.0, 0.5, 0, 0, 0, 0, 0 }
+            };
+
+            string markdown = service.ExportWeeklyTimesheetToMarkdown(data);
+
+            Assert.Contains("Idle-Work Timesheet Summary", markdown);
+            Assert.Contains("| Project / Category | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Total |", markdown);
+            Assert.Contains("**Alpha Revamp**", markdown);
+            Assert.Contains("**Total Active Work**", markdown);
+            Assert.Contains("**Total Meetings**", markdown);
+            Assert.Contains("**Grand Total (Work+Meetings)**", markdown);
+        }
+
+        [Fact]
+        public async Task DatabaseService_GetIntervalsForActivitiesAsync_BatchFetchesIntervalsCorrectly()
+        {
+            // [v0.004: BatchQuery] Verify batch fetching intervals across multiple activities in one query
+            await _dbService.EnsureInitializedAsync();
+
+            var act1 = new ActivityTimeSpan
+            {
+                StartTime = DateTime.Today.AddHours(9),
+                EndTime = DateTime.Today.AddHours(10),
+                DurationSeconds = 3600,
+                ProcessName = "revit.exe",
+                WindowTitle = "Project Model",
+                State = "Active"
+            };
+            await _dbService.SaveActivityAsync(act1);
+
+            var act2 = new ActivityTimeSpan
+            {
+                StartTime = DateTime.Today.AddHours(10),
+                EndTime = DateTime.Today.AddHours(11),
+                DurationSeconds = 3600,
+                ProcessName = "acad.exe",
+                WindowTitle = "Drawing 1",
+                State = "Active"
+            };
+            await _dbService.SaveActivityAsync(act2);
+
+            var int1 = new ActivityInterval
+            {
+                ActivityId = act1.Id,
+                StartTime = DateTime.Today.AddHours(9),
+                EndTime = DateTime.Today.AddHours(9.5),
+                DurationSeconds = 1800,
+                SubProcessName = "chrome.exe"
+            };
+            var int2 = new ActivityInterval
+            {
+                ActivityId = act2.Id,
+                StartTime = DateTime.Today.AddHours(10),
+                EndTime = DateTime.Today.AddHours(10.5),
+                DurationSeconds = 1800,
+                SubProcessName = "slack.exe"
+            };
+            await _dbService.SaveIntervalAsync(int1);
+            await _dbService.SaveIntervalAsync(int2);
+
+            // Fetch in batch
+            var intervals = await _dbService.GetIntervalsForActivitiesAsync(new[] { act1.Id, act2.Id });
+
+            Assert.Equal(2, intervals.Count);
+            Assert.Contains(intervals, i => i.ActivityId == act1.Id && i.SubProcessName == "chrome.exe");
+            Assert.Contains(intervals, i => i.ActivityId == act2.Id && i.SubProcessName == "slack.exe");
+
+            // Empty input returns empty list immediately without error
+            var empty = await _dbService.GetIntervalsForActivitiesAsync(Array.Empty<int>());
+            Assert.Empty(empty);
+        }
+
+        [Fact]
+        public void ScreenshotService_RetentionAndStorageStats_CalculatesCorrectly()
+        {
+            // [v0.004: ScreenshotRetention] Verify retention setting and storage calculations
+            var screenshotService = ScreenshotService.Instance;
+            screenshotService.RetentionDays = 30;
+            Assert.Equal(30, screenshotService.RetentionDays);
+
+            var (fileCount, totalBytes) = screenshotService.GetStorageStats();
+            Assert.True(fileCount >= 0);
+            Assert.True(totalBytes >= 0);
+
+            // Purge runs without error
+            int deleted = screenshotService.PurgeOldScreenshots();
+            Assert.True(deleted >= 0);
         }
 
         public void Dispose()

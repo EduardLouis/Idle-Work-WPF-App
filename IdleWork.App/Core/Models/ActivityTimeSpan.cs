@@ -51,6 +51,24 @@ namespace IdleWork.App.Core.Models
         // [v0.2: MultiMonitor] JSON serialized snapshot of top visible windows across all monitors
         public string? TopWindowsJson { get; set; }
 
+        // [v0.003: RichMetadata] Process & application executable metadata
+        public string? AppDescription { get; set; }
+        public string? ExecutablePath { get; set; }
+        public string? AppCompany { get; set; }
+        public string? AppVersion { get; set; }
+        public string? WindowClassName { get; set; }
+
+        // [v0.003: Screenshot] Active screenshot path captured for this activity
+        public string? ScreenshotPath { get; set; }
+
+        [Ignore]
+        public string DisplayAppDescription => !string.IsNullOrWhiteSpace(AppDescription)
+            ? AppDescription
+            : ProcessName;
+
+        [Ignore]
+        public bool HasScreenshot => !string.IsNullOrEmpty(ScreenshotPath) && System.IO.File.Exists(ScreenshotPath);
+
         // [v0.2: SessionConsolidation] In-memory or joined discrete session intervals
         [Ignore]
         public System.Collections.Generic.List<ActivityInterval> Intervals { get; set; } = new System.Collections.Generic.List<ActivityInterval>();

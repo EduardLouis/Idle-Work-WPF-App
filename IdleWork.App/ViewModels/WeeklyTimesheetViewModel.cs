@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using IdleWork.App.Core.Helpers;
 using IdleWork.App.Core.Services;
 
 namespace IdleWork.App.ViewModels
@@ -24,7 +25,8 @@ namespace IdleWork.App.ViewModels
             {
                 if (SetProperty(ref _referenceDate, value))
                 {
-                    LoadWeeklyDataAsync();
+                    // [v0.004: CompilerWarnings] Safe fire-and-forget on date change
+                    LoadWeeklyDataAsync().SafeFireAndForget("WeeklyTimesheetVM_DateChanged");
                 }
             }
         }
@@ -53,6 +55,7 @@ namespace IdleWork.App.ViewModels
         public ICommand NextWeekCommand { get; }
         public ICommand CurrentWeekCommand { get; }
         public ICommand ExportCsvCommand { get; }
+        public ICommand CopyMarkdownCommand { get; }
         public ICommand RefreshCommand { get; }
 
         public WeeklyTimesheetViewModel(TimesheetService timesheetService)
@@ -62,13 +65,16 @@ namespace IdleWork.App.ViewModels
             PreviousWeekCommand = new RelayCommand(() => ReferenceDate = ReferenceDate.AddDays(-7));
             NextWeekCommand = new RelayCommand(() => ReferenceDate = ReferenceDate.AddDays(7));
             CurrentWeekCommand = new RelayCommand(() => ReferenceDate = DateTime.Today);
-            RefreshCommand = new RelayCommand(() => LoadWeeklyDataAsync());
+            RefreshCommand = new RelayCommand(async () => await LoadWeeklyDataAsync());
             ExportCsvCommand = new RelayCommand(ExportCsv);
+            CopyMarkdownCommand = new RelayCommand(CopyMarkdownToClipboard);
 
-            LoadWeeklyDataAsync();
+            // [v0.004: AsyncRefactoring] Safe initial load
+            LoadWeeklyDataAsync().SafeFireAndForget("WeeklyTimesheetVM_Init");
         }
 
-        public async void LoadWeeklyDataAsync()
+        // [v0.004: AsyncRefactoring] Refactored from async void to async Task for robust error handling
+        public async Task LoadWeeklyDataAsync()
         {
             _currentData = await _timesheetService.GetWeeklyTimesheetAsync(ReferenceDate);
 
@@ -99,6 +105,23 @@ namespace IdleWork.App.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Export failed: {ex.Message}";
+            }
+        }
+
+        // [v0.004: CopyMarkdown] Copy formatted markdown timesheet table to clipboard for Slack/Jira/Teams
+        private void CopyMarkdownToClipboard()
+        {
+            if (_currentData == null) return;
+
+            try
+            {
+                string markdown = _timesheetService.ExportWeeklyTimesheetToMarkdown(_currentData);
+                System.Windows.Clipboard.SetText(markdown);
+                StatusMessage = "📋 Markdown timesheet copied to clipboard!";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Copy failed: {ex.Message}";
             }
         }
     }

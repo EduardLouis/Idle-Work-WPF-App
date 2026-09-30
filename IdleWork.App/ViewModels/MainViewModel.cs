@@ -83,14 +83,16 @@ namespace IdleWork.App.ViewModels
             {
                 CurrentView = TimelineVM;
                 CurrentPageTitle = "Daily Visual Timeline";
-                TimelineVM.LoadTimelineAsync();
+                // [v0.004: CompilerWarnings] Eliminate CS4014 via SafeFireAndForget
+                TimelineVM.LoadTimelineAsync().SafeFireAndForget("NavigateTimeline");
             });
 
             NavigateWeeklyTimesheetCommand = new RelayCommand(() =>
             {
                 CurrentView = WeeklyTimesheetVM;
                 CurrentPageTitle = "Weekly Timesheet Matrix";
-                WeeklyTimesheetVM.LoadWeeklyDataAsync();
+                // [v0.004: CompilerWarnings] Eliminate CS4014 via SafeFireAndForget
+                WeeklyTimesheetVM.LoadWeeklyDataAsync().SafeFireAndForget("NavigateWeeklyTimesheet");
             });
 
             NavigateRulesCommand = new RelayCommand(() =>
@@ -104,7 +106,8 @@ namespace IdleWork.App.ViewModels
             {
                 CurrentView = ProjectsVM;
                 CurrentPageTitle = "Project Management";
-                ProjectsVM.LoadProjectsAsync();
+                // [v0.004: CompilerWarnings] Eliminate CS4014 via SafeFireAndForget
+                ProjectsVM.LoadProjectsAsync().SafeFireAndForget("NavigateProjects");
             });
 
             NavigateSettingsCommand = new RelayCommand(() =>

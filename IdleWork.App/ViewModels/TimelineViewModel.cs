@@ -4,11 +4,32 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using IdleWork.App.Core.Helpers;
 using IdleWork.App.Core.Models;
 using IdleWork.App.Core.Services;
 
 namespace IdleWork.App.ViewModels
 {
+    // [v0.2: TimelineSorting] Sorting options for consolidated daily activities
+    public enum ActivitySortMode
+    {
+        Percentage = 0,
+        LastActive = 1,
+        OldActivity = 2
+    }
+
+    // [v0.003: VisualEvidenceGrid] Model for discrete screenshot evidence items shown in multi-column table/grid
+    public class ActivityScreenshotItem
+    {
+        public string ScreenshotPath { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public string TimeDisplayText { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string ProcessName { get; set; } = string.Empty;
+        public string WindowTitle { get; set; } = string.Empty;
+        public string? AppDescription { get; set; }
+    }
+
     public class TimelineViewModel : ObservableObject
     {
         private readonly DatabaseService _databaseService;
@@ -24,6 +45,11 @@ namespace IdleWork.App.ViewModels
         private string _totalIdleText = "0h 00m";
         private string _statusMessage = "";
 
+        // [v0.003: VisualEvidenceGrid] Collection of all visual screenshots for the selected activity
+        public ObservableCollection<ActivityScreenshotItem> SelectedActivityScreenshots { get; } = new ObservableCollection<ActivityScreenshotItem>();
+        public bool HasAnyScreenshots => SelectedActivityScreenshots.Count > 0;
+        public string ScreenshotCountBadgeText => SelectedActivityScreenshots.Count > 0 ? $"{SelectedActivityScreenshots.Count}" : "";
+
         public DateTime SelectedDate
         {
             get => _selectedDate;
@@ -31,7 +57,7 @@ namespace IdleWork.App.ViewModels
             {
                 if (SetProperty(ref _selectedDate, value))
                 {
-                    LoadTimelineAsync();
+                    _ = LoadTimelineAsync();
                 }
             }
         }
@@ -47,10 +73,72 @@ namespace IdleWork.App.ViewModels
             {
                 if (SetProperty(ref _selectedActivity, value))
                 {
+                    UpdateSelectedActivityScreenshots();
                     PopulateAssignmentChoices();
                     OnPropertyChanged(nameof(NoRulesMessageText));
                 }
             }
+        }
+
+        public void UpdateSelectedActivityScreenshots()
+        {
+            SelectedActivityScreenshots.Clear();
+            if (SelectedActivity == null)
+            {
+                OnPropertyChanged(nameof(HasAnyScreenshots));
+                OnPropertyChanged(nameof(ScreenshotCountBadgeText));
+                return;
+            }
+
+            var seenPaths = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // 1. Primary activity screenshot (if valid on disk)
+            if (!string.IsNullOrEmpty(SelectedActivity.ScreenshotPath) && System.IO.File.Exists(SelectedActivity.ScreenshotPath))
+            {
+                seenPaths.Add(SelectedActivity.ScreenshotPath);
+                SelectedActivityScreenshots.Add(new ActivityScreenshotItem
+                {
+                    ScreenshotPath = SelectedActivity.ScreenshotPath,
+                    Timestamp = SelectedActivity.StartTime,
+                    TimeDisplayText = SelectedActivity.StartTime.ToString("HH:mm:ss"),
+                    Label = "Main Window",
+                    ProcessName = SelectedActivity.ProcessName,
+                    WindowTitle = SelectedActivity.WindowTitle,
+                    AppDescription = SelectedActivity.AppDescription
+                });
+            }
+
+            // 2. Child intervals screenshots (from multi-monitor sub-activities or periodic interval captures)
+            if (SelectedActivity.Intervals != null && SelectedActivity.Intervals.Count > 0)
+            {
+                foreach (var interval in SelectedActivity.Intervals)
+                {
+                    if (!string.IsNullOrEmpty(interval.ScreenshotPath) &&
+                        System.IO.File.Exists(interval.ScreenshotPath) &&
+                        seenPaths.Add(interval.ScreenshotPath))
+                    {
+                        string subProc = interval.SubProcessName ?? SelectedActivity.ProcessName;
+                        string subTitle = interval.SubWindowTitle ?? SelectedActivity.WindowTitle;
+                        string label = !string.IsNullOrEmpty(interval.SubProcessName)
+                            ? $"Sub: {interval.SubProcessName}"
+                            : $"{interval.TimeRangeText}";
+
+                        SelectedActivityScreenshots.Add(new ActivityScreenshotItem
+                        {
+                            ScreenshotPath = interval.ScreenshotPath,
+                            Timestamp = interval.StartTime,
+                            TimeDisplayText = interval.StartTime.ToString("HH:mm:ss"),
+                            Label = label,
+                            ProcessName = subProc,
+                            WindowTitle = subTitle,
+                            AppDescription = SelectedActivity.AppDescription
+                        });
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(HasAnyScreenshots));
+            OnPropertyChanged(nameof(ScreenshotCountBadgeText));
         }
 
         // [v0.2: DualAssign] Mode toggle: Classification Rule vs Direct Project
@@ -87,6 +175,16 @@ namespace IdleWork.App.ViewModels
         public string NoRulesMessageText => $"No classification rules defined for '{SelectedActivity?.ProcessName}'. Switch to 'Direct Project' to assign a project and automatically learn a new rule.";
 
         public ObservableCollection<AssignmentChoice> AssignmentChoices { get; } = new ObservableCollection<AssignmentChoice>();
+        public object AssignmentChoicesLock { get; } = new object();
+
+        // [v0.003: ThreadSafeSnapshot] Return safe snapshot of assignment choices
+        public List<AssignmentChoice> GetAssignmentChoicesSnapshot()
+        {
+            lock (AssignmentChoicesLock)
+            {
+                return AssignmentChoices.ToList();
+            }
+        }
 
         // [v0.2: QuickCreate] Event to request opening dialog from UI
         public event EventHandler<bool>? RequestCreateNew;
@@ -192,6 +290,42 @@ namespace IdleWork.App.ViewModels
         public ICommand TodayCommand { get; }
         public ICommand AssignProjectCommand { get; }
         public ICommand RefreshCommand { get; }
+        public ICommand SetSortModeCommand { get; }
+        public ICommand PreviewScreenshotCommand { get; }
+        public ICommand PreviewIntervalScreenshotCommand { get; }
+        public event EventHandler<ActivityTimeSpan>? RequestPreviewScreenshot;
+
+        // [v0.2: TimelineSorting] Sorting options for consolidated daily activities
+        private ActivitySortMode _selectedSortMode = ActivitySortMode.Percentage;
+        private readonly List<ActivityTimeSpan> _allConsolidatedActivities = new List<ActivityTimeSpan>();
+
+        public ActivitySortMode SelectedSortMode
+        {
+            get => _selectedSortMode;
+            set
+            {
+                if (SetProperty(ref _selectedSortMode, value))
+                {
+                    OnPropertyChanged(nameof(SelectedSortIndex));
+                    ApplyActivitySorting();
+                }
+            }
+        }
+
+        public int SelectedSortIndex
+        {
+            get => (int)_selectedSortMode;
+            set
+            {
+                if (value >= 0 && value <= 2 && (int)_selectedSortMode != value)
+                {
+                    _selectedSortMode = (ActivitySortMode)value;
+                    OnPropertyChanged(nameof(SelectedSortIndex));
+                    OnPropertyChanged(nameof(SelectedSortMode));
+                    ApplyActivitySorting();
+                }
+            }
+        }
 
         public TimelineViewModel(DatabaseService databaseService, RuleClassifierService classifierService)
         {
@@ -201,13 +335,137 @@ namespace IdleWork.App.ViewModels
             PreviousDayCommand = new RelayCommand(() => SelectedDate = SelectedDate.AddDays(-1));
             NextDayCommand = new RelayCommand(() => SelectedDate = SelectedDate.AddDays(1));
             TodayCommand = new RelayCommand(() => SelectedDate = DateTime.Today);
-            RefreshCommand = new RelayCommand(() => LoadTimelineAsync());
+            RefreshCommand = new RelayCommand(async () => await LoadTimelineAsync());
             AssignProjectCommand = new RelayCommand(async () => await AssignProjectAsync());
             CreateNewCommand = new RelayCommand(() => RequestCreateNew?.Invoke(this, IsAssignByRule));
+            SetSortModeCommand = new RelayCommand(param =>
+            {
+                if (param is ActivitySortMode mode) SelectedSortMode = mode;
+                else if (param is string s && int.TryParse(s, out int idx)) SelectedSortIndex = idx;
+            });
 
-            LoadProjectsAsync();
-            _ = LoadRulesCacheAsync();
-            LoadTimelineAsync();
+            // [v0.003: VisualEvidence] Screenshot preview commands
+            PreviewScreenshotCommand = new RelayCommand(param =>
+            {
+                if (param is ActivityScreenshotItem item && !string.IsNullOrEmpty(item.ScreenshotPath))
+                {
+                    var dummySpan = new ActivityTimeSpan
+                    {
+                        ProcessName = item.ProcessName,
+                        WindowTitle = item.WindowTitle,
+                        AppDescription = item.AppDescription ?? SelectedActivity?.AppDescription,
+                        StartTime = item.Timestamp,
+                        ScreenshotPath = item.ScreenshotPath
+                    };
+                    RequestPreviewScreenshot?.Invoke(this, dummySpan);
+                }
+                else if (SelectedActivityScreenshots.Count > 0)
+                {
+                    var first = SelectedActivityScreenshots[0];
+                    var dummySpan = new ActivityTimeSpan
+                    {
+                        ProcessName = first.ProcessName,
+                        WindowTitle = first.WindowTitle,
+                        AppDescription = first.AppDescription ?? SelectedActivity?.AppDescription,
+                        StartTime = first.Timestamp,
+                        ScreenshotPath = first.ScreenshotPath
+                    };
+                    RequestPreviewScreenshot?.Invoke(this, dummySpan);
+                }
+                else if (SelectedActivity != null && SelectedActivity.HasScreenshot)
+                {
+                    RequestPreviewScreenshot?.Invoke(this, SelectedActivity);
+                }
+            });
+
+            PreviewIntervalScreenshotCommand = new RelayCommand(param =>
+            {
+                if (param is ActivityInterval interval && !string.IsNullOrEmpty(interval.ScreenshotPath))
+                {
+                    var dummySpan = new ActivityTimeSpan
+                    {
+                        ProcessName = interval.SubProcessName ?? SelectedActivity?.ProcessName ?? "Activity",
+                        WindowTitle = interval.SubWindowTitle ?? SelectedActivity?.WindowTitle ?? "",
+                        AppDescription = SelectedActivity?.AppDescription,
+                        StartTime = interval.StartTime,
+                        ScreenshotPath = interval.ScreenshotPath
+                    };
+                    RequestPreviewScreenshot?.Invoke(this, dummySpan);
+                }
+            });
+
+            // [v0.004: AsyncRefactoring] Safe fire-and-forget initializations
+            LoadProjectsAsync().SafeFireAndForget("TimelineVM_Projects");
+            LoadRulesCacheAsync().SafeFireAndForget("TimelineVM_Rules");
+            LoadCategoriesAndTagsCacheAsync().SafeFireAndForget("TimelineVM_Categories");
+            LoadTimelineAsync().SafeFireAndForget("TimelineVM_Timeline");
+        }
+
+        // [v0.2: TimelineSorting] Sorts consolidated activities by Percentage, Last Active, or Old Activity
+        public void ApplyActivitySorting()
+        {
+            void Apply()
+            {
+                if (_allConsolidatedActivities == null || _allConsolidatedActivities.Count == 0)
+                    return;
+
+                var prevSelected = SelectedActivity;
+                IEnumerable<ActivityTimeSpan> sorted;
+
+                switch (_selectedSortMode)
+                {
+                    case ActivitySortMode.Percentage:
+                        // Highest percentage / duration first
+                        sorted = _allConsolidatedActivities.OrderByDescending(a => a.DurationSeconds);
+                        break;
+                    case ActivitySortMode.LastActive:
+                        // Most recently active first (latest EndTime first)
+                        sorted = _allConsolidatedActivities.OrderByDescending(a => a.EndTime);
+                        break;
+                    case ActivitySortMode.OldActivity:
+                        // Oldest activity first (earliest StartTime first)
+                        sorted = _allConsolidatedActivities.OrderBy(a => a.StartTime);
+                        break;
+                    default:
+                        sorted = _allConsolidatedActivities.OrderByDescending(a => a.DurationSeconds);
+                        break;
+                }
+
+                Activities.Clear();
+                foreach (var item in sorted)
+                {
+                    Activities.Add(item);
+                }
+
+                if (prevSelected != null)
+                {
+                    SelectedActivity = Activities.FirstOrDefault(a => a.Id == prevSelected.Id ||
+                        (a.ProcessName == prevSelected.ProcessName && a.WindowTitle == prevSelected.WindowTitle))
+                        ?? Activities.FirstOrDefault();
+                }
+            }
+
+            if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
+            {
+                App.Current.Dispatcher.Invoke(Apply);
+            }
+            else
+            {
+                Apply();
+            }
+        }
+
+        private List<WorkCategory> _cachedCategories = new List<WorkCategory>();
+        private List<WorkTag> _cachedTags = new List<WorkTag>();
+        public IReadOnlyList<WorkCategory> CachedCategories => _cachedCategories;
+        public IReadOnlyList<WorkTag> CachedTags => _cachedTags;
+
+        public async Task LoadCategoriesAndTagsCacheAsync()
+        {
+            var categories = await _databaseService.GetCategoriesAsync();
+            _cachedCategories = categories ?? new List<WorkCategory>();
+            var tags = await _databaseService.GetTagsAsync();
+            _cachedTags = tags ?? new List<WorkTag>();
         }
 
         public async Task LoadRulesCacheAsync()
@@ -219,93 +477,98 @@ namespace IdleWork.App.ViewModels
 
         public void PopulateAssignmentChoices()
         {
-            _isPopulatingChoices = true;
-            try
+            lock (AssignmentChoicesLock)
             {
-                AssignmentChoices.Clear();
-
-                if (IsAssignByRule)
+                _isPopulatingChoices = true;
+                try
                 {
-                    if (SelectedActivity != null && !string.IsNullOrWhiteSpace(SelectedActivity.ProcessName))
-                    {
-                        string proc = SelectedActivity.ProcessName.Trim();
-                        // [v0.2: RuleFilter] Filter rules strictly to this application or generic rules
-                        var matchingRules = _cachedAllRules
-                            .Where(r => r.IsEnabled && (string.IsNullOrWhiteSpace(r.ProcessFilter) ||
-                                                        proc.Contains(r.ProcessFilter.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                                        r.ProcessFilter.Trim().Contains(proc, StringComparison.OrdinalIgnoreCase)))
-                            .OrderBy(r => r.Priority)
-                            .ToList();
+                    AssignmentChoices.Clear();
 
-                        foreach (var rule in matchingRules)
+                    if (IsAssignByRule)
+                    {
+                        if (SelectedActivity != null && !string.IsNullOrWhiteSpace(SelectedActivity.ProcessName))
+                        {
+                            string proc = SelectedActivity.ProcessName.Trim();
+                            var rulesSnapshot = _cachedAllRules.ToList();
+                            // [v0.2: RuleFilter] Filter rules strictly to this application or generic rules
+                            var matchingRules = rulesSnapshot
+                                .Where(r => r.IsEnabled && (string.IsNullOrWhiteSpace(r.ProcessFilter) ||
+                                                            proc.Contains(r.ProcessFilter.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                                            r.ProcessFilter.Trim().Contains(proc, StringComparison.OrdinalIgnoreCase)))
+                                .OrderBy(r => r.Priority)
+                                .ToList();
+
+                            foreach (var rule in matchingRules)
+                            {
+                                AssignmentChoices.Add(new AssignmentChoice
+                                {
+                                    Title = rule.RuleName,
+                                    Subtitle = $"→ Target Project: {rule.TargetProject}",
+                                    TargetProject = rule.TargetProject,
+                                    TargetCategory = rule.TargetCategory,
+                                    TargetTags = rule.TargetTags,
+                                    IsRule = true,
+                                    IsCreateAction = false,
+                                    Rule = rule
+                                });
+                            }
+                        }
+
+                        HasNoApplicableRules = AssignmentChoices.Count == 0 && SelectedActivity != null;
+
+                        // [v0.2: QuickCreate] Append Create New Rule action row
+                        AssignmentChoices.Add(new AssignmentChoice
+                        {
+                            Title = "➕ Create New Rule...",
+                            Subtitle = SelectedActivity != null && !string.IsNullOrEmpty(SelectedActivity.ProcessName)
+                                ? $"Create rule for {SelectedActivity.ProcessName}"
+                                : "Configure a new classification rule",
+                            IsRule = true,
+                            IsCreateAction = true
+                        });
+                    }
+                    else
+                    {
+                        HasNoApplicableRules = false;
+                        var projectsSnapshot = AvailableProjects.ToList();
+                        foreach (var proj in projectsSnapshot)
                         {
                             AssignmentChoices.Add(new AssignmentChoice
                             {
-                                Title = rule.RuleName,
-                                Subtitle = $"→ Target Project: {rule.TargetProject}",
-                                TargetProject = rule.TargetProject,
-                                TargetCategory = rule.TargetCategory,
-                                TargetTags = rule.TargetTags,
-                                IsRule = true,
+                                Title = proj.Name,
+                                Subtitle = string.IsNullOrEmpty(proj.Code) ? "" : $"Code: {proj.Code}",
+                                TargetProject = proj.Name,
+                                IsRule = false,
                                 IsCreateAction = false,
-                                Rule = rule
+                                Project = proj
                             });
                         }
-                    }
 
-                    HasNoApplicableRules = AssignmentChoices.Count == 0 && SelectedActivity != null;
-
-                    // [v0.2: QuickCreate] Append Create New Rule action row
-                    AssignmentChoices.Add(new AssignmentChoice
-                    {
-                        Title = "➕ Create New Rule...",
-                        Subtitle = SelectedActivity != null && !string.IsNullOrEmpty(SelectedActivity.ProcessName)
-                            ? $"Create rule for {SelectedActivity.ProcessName}"
-                            : "Configure a new classification rule",
-                        IsRule = true,
-                        IsCreateAction = true
-                    });
-                }
-                else
-                {
-                    HasNoApplicableRules = false;
-                    foreach (var proj in AvailableProjects)
-                    {
+                        // [v0.2: QuickCreate] Append Create New Project action row
                         AssignmentChoices.Add(new AssignmentChoice
                         {
-                            Title = proj.Name,
-                            Subtitle = string.IsNullOrEmpty(proj.Code) ? "" : $"Code: {proj.Code}",
-                            TargetProject = proj.Name,
+                            Title = "➕ Create New Project...",
+                            Subtitle = "Register and configure a new project account",
                             IsRule = false,
-                            IsCreateAction = false,
-                            Project = proj
+                            IsCreateAction = true
                         });
                     }
 
-                    // [v0.2: QuickCreate] Append Create New Project action row
-                    AssignmentChoices.Add(new AssignmentChoice
+                    if (AssignmentChoices.Count > 0)
                     {
-                        Title = "➕ Create New Project...",
-                        Subtitle = "Register and configure a new project account",
-                        IsRule = false,
-                        IsCreateAction = true
-                    });
+                        // Select matching project/rule or first non-create action. Never auto-select create action.
+                        SelectedChoice = AssignmentChoices.FirstOrDefault(c => !c.IsCreateAction && c.TargetProject == SelectedActivity?.ProjectName)
+                                         ?? AssignmentChoices.FirstOrDefault(c => !c.IsCreateAction);
+                    }
+                    else
+                    {
+                        SelectedChoice = null;
+                    }
                 }
-
-                if (AssignmentChoices.Count > 0)
+                finally
                 {
-                    // Select matching project/rule or first non-create action. Never auto-select create action.
-                    SelectedChoice = AssignmentChoices.FirstOrDefault(c => !c.IsCreateAction && c.TargetProject == SelectedActivity?.ProjectName)
-                                     ?? AssignmentChoices.FirstOrDefault(c => !c.IsCreateAction);
+                    _isPopulatingChoices = false;
                 }
-                else
-                {
-                    SelectedChoice = null;
-                }
-            }
-            finally
-            {
-                _isPopulatingChoices = false;
             }
         }
 
@@ -386,7 +649,8 @@ namespace IdleWork.App.ViewModels
             }
         }
 
-        public async void LoadProjectsAsync()
+        // [v0.004: AsyncRefactoring] Refactored from async void to async Task
+        public async Task LoadProjectsAsync()
         {
             var projects = await _databaseService.GetProjectsAsync();
             AvailableProjects.Clear();
@@ -397,12 +661,35 @@ namespace IdleWork.App.ViewModels
             PopulateAssignmentChoices();
         }
 
-        public async void LoadTimelineAsync()
+        private System.Threading.CancellationTokenSource? _loadCts;
+        private readonly object _loadLock = new object();
+
+        public async Task LoadTimelineAsync()
         {
+            System.Threading.CancellationToken token;
+            lock (_loadLock)
+            {
+                _loadCts?.Cancel();
+                _loadCts?.Dispose();
+                _loadCts = new System.Threading.CancellationTokenSource();
+                token = _loadCts.Token;
+            }
+
             DateTime start = SelectedDate.Date;
             DateTime end = start.AddDays(1).AddTicks(-1);
 
-            var items = await _databaseService.GetActivitiesForDateRangeAsync(start, end);
+            List<ActivityTimeSpan> items;
+            try
+            {
+                items = await _databaseService.GetActivitiesForDateRangeAsync(start, end);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (token.IsCancellationRequested || start != SelectedDate.Date)
+                return;
 
             Activities.Clear();
             UsageSegments.Clear();
@@ -454,9 +741,21 @@ namespace IdleWork.App.ViewModels
                 { "Teams", "#F59E0B" }
             };
 
-            foreach (var grp in grouped.OrderByDescending(g => g.Sum(x => x.DurationSeconds)))
+            // [v0.004: PerformanceNPlus1] Pre-fetch all child intervals in a single batch query
+            var allChunkIds = grouped.SelectMany(g => g.Select(x => x.Id)).Where(id => id > 0).Distinct().ToList();
+            var allLoadedIntervals = await _databaseService.GetIntervalsForActivitiesAsync(allChunkIds);
+            var intervalsByActivityId = allLoadedIntervals
+                .GroupBy(i => i.ActivityId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            _allConsolidatedActivities.Clear();
+            foreach (var grp in grouped)
             {
                 var rep = grp.First();
+                // Find first valid screenshot path from chunks if available
+                string? firstChunkScreenshot = grp.Select(x => x.ScreenshotPath)
+                    .FirstOrDefault(p => !string.IsNullOrEmpty(p) && System.IO.File.Exists(p));
+
                 double consolidatedSec = grp.Sum(x => x.DurationSeconds);
 
                 var consolidated = new ActivityTimeSpan
@@ -474,15 +773,20 @@ namespace IdleWork.App.ViewModels
                     DurationSeconds = consolidatedSec,
                     SubProcessName = rep.SubProcessName,
                     SubWindowTitle = rep.SubWindowTitle,
+                    AppDescription = rep.AppDescription,
+                    ExecutablePath = rep.ExecutablePath,
+                    AppCompany = rep.AppCompany,
+                    AppVersion = rep.AppVersion,
+                    WindowClassName = rep.WindowClassName,
+                    ScreenshotPath = firstChunkScreenshot,
                     PercentageOfDay = totalSec > 0 ? (consolidatedSec / totalSec) * 100 : 0
                 };
 
-                // Populate all discrete intervals for this consolidated group
+                // Populate all discrete intervals for this consolidated group via memory dictionary lookup
                 var allIntervals = new List<ActivityInterval>();
                 foreach (var chunk in grp)
                 {
-                    var dbIntervals = await _databaseService.GetIntervalsForActivityAsync(chunk.Id);
-                    if (dbIntervals != null && dbIntervals.Count > 0)
+                    if (intervalsByActivityId.TryGetValue(chunk.Id, out var dbIntervals) && dbIntervals.Count > 0)
                     {
                         allIntervals.AddRange(dbIntervals);
                     }
@@ -495,14 +799,25 @@ namespace IdleWork.App.ViewModels
                             EndTime = chunk.EndTime,
                             DurationSeconds = chunk.DurationSeconds,
                             SubProcessName = chunk.SubProcessName,
-                            SubWindowTitle = chunk.SubWindowTitle
+                            SubWindowTitle = chunk.SubWindowTitle,
+                            ScreenshotPath = chunk.ScreenshotPath
                         });
                     }
                 }
 
+                // If consolidated screenshot wasn't on the chunk, check intervals
+                if (string.IsNullOrEmpty(consolidated.ScreenshotPath))
+                {
+                    consolidated.ScreenshotPath = allIntervals
+                        .Select(i => i.ScreenshotPath)
+                        .FirstOrDefault(p => !string.IsNullOrEmpty(p) && System.IO.File.Exists(p));
+                }
+
                 consolidated.Intervals = allIntervals.OrderBy(i => i.StartTime).ToList();
-                Activities.Add(consolidated);
+                _allConsolidatedActivities.Add(consolidated);
             }
+
+            ApplyActivitySorting();
 
             // [v0.2: TimelineRibbons] Generate 24-hour visual ribbon segments (seconds from midnight)
             const double secondsInDay = 86400.0;
@@ -637,7 +952,7 @@ namespace IdleWork.App.ViewModels
                 }
             }
 
-            LoadTimelineAsync();
+            await LoadTimelineAsync();
         }
     }
 }

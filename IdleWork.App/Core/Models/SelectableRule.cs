@@ -9,10 +9,18 @@ namespace IdleWork.App.Core.Models
         public AutoTagRule Rule { get; }
         public bool IsNew { get; set; }
 
+        public event System.EventHandler? SelectionChanged;
+
         public bool IsSelected
         {
             get => _isSelected;
-            set => SetProperty(ref _isSelected, value);
+            set
+            {
+                if (SetProperty(ref _isSelected, value))
+                {
+                    SelectionChanged?.Invoke(this, System.EventArgs.Empty);
+                }
+            }
         }
 
         public string RuleName => Rule.RuleName;

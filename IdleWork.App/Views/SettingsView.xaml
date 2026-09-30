@@ -70,11 +70,11 @@
                             <TextBlock Text="Minimum seconds in a window before recording (filters rapid Alt-Tabs)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DwellDebounceSeconds, StringFormat='{}{0:F1}s'}" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding DwellDebounceDisplay}" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="14" VerticalAlignment="Center" />
                             <Border Background="#0F172A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="Default: 2.5s" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                                <TextBlock Text="Default: 30s" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                             </Border>
-                            <Button Style="{StaticResource SecondaryButton}" Command="{Binding ResetDwellDebounceCommand}" ToolTip="Reset to default (2.5s)" Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <Button Style="{StaticResource SecondaryButton}" Command="{Binding ResetDwellDebounceCommand}" ToolTip="Reset to default (30s)" Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="↺" FontWeight="Bold" Margin="0,0,4,0" Foreground="{StaticResource AccentBrush}" />
                                     <TextBlock Text="Reset" FontSize="11" />
@@ -82,23 +82,24 @@
                             </Button>
                         </StackPanel>
                     </Grid>
-                    <Slider Minimum="1.0" Maximum="5.0" Value="{Binding DwellDebounceSeconds}" 
-                            Ticks="1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0" 
+                    <Slider Minimum="30.0" Maximum="180.0" Value="{Binding DwellDebounceSeconds}" 
+                            Ticks="30, 60, 90, 120, 150, 180" 
                             TickPlacement="BottomRight" IsSnapToTickEnabled="True" 
                             Foreground="{StaticResource AccentBrush}" Cursor="Hand" Margin="0,0,0,4" />
                     <!-- Default Marker & Range Legend -->
                     <Grid Margin="4,0,4,8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.5*" />
-                            <ColumnDefinition Width="2.5*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="1.0s" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Left" />
-                        <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,0,-24,0">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="30s" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
                             <Border Background="#0F172A" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="3" Padding="4,1">
-                                <TextBlock Text="▲ Default (2.5s)" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock Text="▲ Default (30s)" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
                             </Border>
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="5.0s" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="2" Text="3 min (180s)" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -151,6 +152,138 @@
                 </StackPanel>
             </Border>
 
+            <!-- [v0.003: Preferences] Screenshot & Visual Context Card -->
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="SCREENSHOTS &amp; VISUAL CONTEXT" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12" />
+
+                    <!-- Master Switch -->
+                    <CheckBox IsChecked="{Binding EnableScreenshots}" Content="Enable Visual Activity Screenshots" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8" Cursor="Hand" />
+                    <TextBlock Text="Captures compressed JPEG screenshots of active windows/monitors to help identify past work." Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="24,0,0,14" />
+
+                    <!-- Window Switch Capture Toggle -->
+                    <CheckBox IsChecked="{Binding CaptureOnWindowSwitch}" Content="Capture on Window Switch" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Margin="24,0,0,4" Cursor="Hand" IsEnabled="{Binding EnableScreenshots}" />
+                    <TextBlock Text="Automatically takes a screenshot when focus switches to a new application or document." Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="48,0,0,14" />
+
+                    <!-- Periodic Capture Slider -->
+                    <Grid Margin="24,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Periodic Capture Interval" FontWeight="SemiBold" FontSize="12" />
+                            <TextBlock Text="How frequently to capture visual evidence while working continuously in an application" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ScreenshotIntervalDisplayText}" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="13" VerticalAlignment="Center" />
+                            <Border Background="#0F172A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="Default: 5 min" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                            </Border>
+                            <Button Style="{StaticResource SecondaryButton}" Command="{Binding ResetScreenshotSettingsCommand}" ToolTip="Reset to defaults" Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="↺" FontWeight="Bold" Margin="0,0,4,0" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="Reset" FontSize="11" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <Slider Margin="24,0,0,4" Minimum="0" Maximum="30" Value="{Binding ScreenshotIntervalMinutes}" 
+                            Ticks="0, 1, 2, 5, 10, 15, 30" TickPlacement="BottomRight" IsSnapToTickEnabled="True" 
+                            Foreground="{StaticResource AccentBrush}" Cursor="Hand" IsEnabled="{Binding EnableScreenshots}" />
+
+                    <!-- Default Marker & Range Legend -->
+                    <Grid Margin="28,0,4,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="5*" />
+                            <ColumnDefinition Width="25*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Off" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Left" />
+                        <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,0,-24,0">
+                            <Border Background="#0F172A" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="3" Padding="4,1">
+                                <TextBlock Text="▲ Default (5 min)" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="30 min" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" />
+                    </Grid>
+
+                    <!-- [v0.004: ScreenshotRetention] Retention Settings & Disk Pruning -->
+                    <Grid Margin="24,14,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Automatic Screenshot Retention" FontWeight="SemiBold" FontSize="12" />
+                            <TextBlock Text="Automatically prune visual screenshot archives older than the specified retention window" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding ScreenshotRetentionDisplayText}" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="13" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Slider Margin="24,0,0,4" Minimum="0" Maximum="90" Value="{Binding ScreenshotRetentionDays}" 
+                            Ticks="0, 7, 14, 30, 60, 90" TickPlacement="BottomRight" IsSnapToTickEnabled="True" 
+                            Foreground="{StaticResource AccentBrush}" Cursor="Hand" />
+
+                    <Grid Margin="28,0,4,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Forever" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Left" />
+                        <TextBlock Grid.Column="1" Text="▲ Default (14d)" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="90 days" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" />
+                    </Grid>
+
+                    <!-- Storage usage and maintenance buttons -->
+                    <StackPanel Orientation="Horizontal" Margin="24,6,0,0">
+                        <Border Background="#0F172A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="💾 Disk Usage: " FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding ScreenshotStorageStatsText}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding OpenScreenshotsFolderCommand}" Content="📸 Open Folder" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding PurgeOldScreenshotsNowCommand}" Content="🧹 Clean Old Now" Margin="0,0,8,0" ToolTip="Clean screenshots older than retention window" />
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding ClearAllScreenshotsCommand}" Content="🗑️ Clear All" ToolTip="Permanently clear all screenshots" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- [v0.003: SystemTray] System Tray & Background Runtime Card -->
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="SYSTEM TRAY &amp; BACKGROUND RUNTIME (NEAR CLOCK)" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Command="{Binding ResetTraySettingsCommand}" ToolTip="Reset to defaults" Padding="8,3" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="↺" FontWeight="Bold" Margin="0,0,4,0" Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock Text="Reset" FontSize="11" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Minimize to Tray Toggle -->
+                    <CheckBox IsChecked="{Binding MinimizeToTray}" Content="Minimize Window to System Tray" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" Cursor="Hand" />
+                    <TextBlock Text="When minimizing, hides the application from the taskbar and places an active tracking icon near the Windows clock." Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="24,0,0,14" />
+
+                    <!-- Close to Tray Toggle -->
+                    <CheckBox IsChecked="{Binding CloseToTray}" Content="Close Button (X) Minimizes to System Tray" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" Cursor="Hand" />
+                    <TextBlock Text="Clicking the window close button minimizes Idle-Work to the system tray so time tracking continues seamlessly in the background. To quit completely, use 'Exit' from the system tray menu." Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="24,0,0,14" TextWrapping="Wrap" />
+
+                    <!-- Action buttons -->
+                    <StackPanel Orientation="Horizontal" Margin="24,4,0,0">
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding MinimizeToTrayNowCommand}" Content="🔽 Minimize to Tray Now" Margin="0,0,12,0" />
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding TestTrayNotificationCommand}" Content="🔔 Test Tray Notification" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Local SQLite Database Card -->
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
@@ -164,6 +297,41 @@
                     </StackPanel>
 
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource ActiveBrush}" FontSize="12" Margin="0,12,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- [v0.003: LoggingCard] Enterprise Logging & Cloud Telemetry Card -->
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="ENTERPRISE LOGGING &amp; CLOUD TELEMETRY" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Command="{Binding ResetCloudSettingsCommand}" Content="↺ Clear Cloud URL" FontSize="11" Padding="8,2" />
+                    </Grid>
+
+                    <TextBlock Text="Local System Diagnostics" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4" />
+                    <TextBlock Text="Daily rotating application and crash logs stored in AppData. Automatically captures uncaught errors, process tracking diagnostics, and activity state changes." 
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <Button Style="{StaticResource SecondaryButton}" Command="{Binding OpenLogsFolderCommand}" Content="📂 Open AppData Logs Folder" />
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource SurfaceBorderBrush}" Margin="0,0,0,16" />
+
+                    <TextBlock Text="Cloud Web API Ingestion Endpoint" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4" />
+                    <TextBlock Text="Enter the HTTPS REST API URL to stream batch usage activities, performance metrics, and error stack traces directly to your cloud database. Leave blank for local logging only." 
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap" />
+
+                    <TextBox Text="{Binding CloudEndpointUrl, UpdateSourceTrigger=PropertyChanged}" 
+                             ToolTip="e.g. https://telemetry.yourcompany.com/api/v1/telemetry/events" 
+                             Margin="0,0,0,10" Padding="10,8" />
+
+                    <CheckBox IsChecked="{Binding EnableCloudTelemetry}" Content="Enable Cloud Telemetry Dispatch (when endpoint is configured)" 
+                              Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" Margin="0,0,0,4" />
                 </StackPanel>
             </Border>
 

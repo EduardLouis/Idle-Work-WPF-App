@@ -202,96 +202,171 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid Margin="0,0,0,10">
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Consolidated Daily Activities" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="Grouped by App &amp; Document" Foreground="{StaticResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Consolidated Daily Activities" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Activities.Count, StringFormat=' ({0})'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0" />
+                        </StackPanel>
+
+                        <!-- Sort Options -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Sort by:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ComboBox SelectedIndex="{Binding SelectedSortIndex, Mode=TwoWay}" Width="195" FontSize="11" Padding="8,4">
+                                <ComboBoxItem Content="📊 Percentage (% / Duration)" />
+                                <ComboBoxItem Content="🕒 Last Active (Recent First)" />
+                                <ComboBoxItem Content="⏮️ Old Activity (Earliest First)" />
+                            </ComboBox>
+                        </StackPanel>
                     </Grid>
 
-                    <!-- Activities List with Expandable Interval Drawers -->
-                    <ListView Grid.Row="1" ItemsSource="{Binding Activities}" SelectedItem="{Binding SelectedActivity}"
+                    <!-- Column Header Row -->
+                    <Border Grid.Row="1" Background="#0F172A" CornerRadius="4" Padding="12,6" Margin="0,0,0,6" BorderBrush="#1E293B" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="65" />
+                                <ColumnDefinition Width="70" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" Text="Time Range" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" />
+                            <TextBlock Grid.Column="2" Text="Application" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" />
+                            <TextBlock Grid.Column="3" Text="Window Title / Document" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="6,0" />
+                            <TextBlock Grid.Column="4" Text="Project" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" />
+                            <TextBlock Grid.Column="5" Text="Share" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="6" Text="Duration" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+                    </Border>
+
+                    <!-- [v0.003: NoHorizontalScroll] Activities List with Expandable Interval Drawers (No horizontal scroll, full-width stretch, multi-line cell wrapping) -->
+                    <ListView Grid.Row="2" ItemsSource="{Binding Activities}" SelectedItem="{Binding SelectedActivity}"
                               Background="Transparent" BorderThickness="0"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.CanContentScroll="False"
                               helpers:ScrollHelper.BubbleMouseWheel="True">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListViewItem">
+                                            <Border x:Name="ContainerBorder" Background="#162032" BorderBrush="#253347" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                <ContentPresenter HorizontalAlignment="Stretch" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ContainerBorder" Property="Background" Value="#1E293B" />
+                                                    <Setter TargetName="ContainerBorder" Property="BorderBrush" Value="#334155" />
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="ContainerBorder" Property="Background" Value="#1E2D4A" />
+                                                    <Setter TargetName="ContainerBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                    <Setter TargetName="ContainerBorder" Property="BorderThickness" Value="1.5" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="#162032" CornerRadius="6" Padding="12,10" Margin="0,0,0,6" BorderBrush="#253347" BorderThickness="1">
-                                    <StackPanel>
-                                        <!-- Top Row: Summary -->
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="90" />
-                                                <ColumnDefinition Width="110" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="110" />
-                                                <ColumnDefinition Width="65" />
-                                                <ColumnDefinition Width="70" />
-                                            </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <!-- Top Row: Summary Grid with multi-row cell wrapping -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28" />
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="65" />
+                                            <ColumnDefinition Width="70" />
+                                        </Grid.ColumnDefinitions>
 
-                                            <!-- Expand / Collapse Toggle -->
-                                            <Button Grid.Column="0" Command="{Binding ToggleExpandCommand}" Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="2" HorizontalAlignment="Left">
-                                                <TextBlock Text="{Binding IsExpanded, Converter={x:Static helpers:BoolToArrowConverter.Instance}}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
-                                            </Button>
+                                        <!-- Expand / Collapse Toggle -->
+                                        <Button Grid.Column="0" Command="{Binding ToggleExpandCommand}" Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="2" HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding IsExpanded, Converter={x:Static helpers:BoolToArrowConverter.Instance}}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                                        </Button>
 
-                                            <!-- Time Range -->
-                                            <TextBlock Grid.Column="1" Text="{Binding TimeSpanRangeText}" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" FontSize="11" />
+                                        <!-- Time Range -->
+                                        <TextBlock Grid.Column="1" Text="{Binding TimeSpanRangeText}" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" FontSize="11" TextWrapping="Wrap" />
 
-                                            <!-- Process Badge -->
-                                            <Border Grid.Column="2" Background="#1E293B" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding ProcessName}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="11" />
-                                            </Border>
+                                        <!-- Process Badge -->
+                                        <Border Grid.Column="2" Background="#1E293B" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,6,0">
+                                            <TextBlock Text="{Binding ProcessName}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
+                                        </Border>
 
-                                            <!-- Window Title & Document -->
-                                            <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="6,0">
-                                                <TextBlock Text="{Binding WindowTitle}" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" FontWeight="Medium" />
-                                                <TextBlock Text="{Binding SubActivityDisplay}" Foreground="{StaticResource MeetingBrush}" FontSize="10" TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-
-                                            <!-- Project Badge -->
-                                            <Border Grid.Column="4" Background="#0F172A" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding ProjectName, TargetNullValue='Unassigned'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
-                                            </Border>
-
-                                            <!-- Percentage of Day Pill -->
-                                            <Border Grid.Column="5" Background="#1E293B" CornerRadius="4" Padding="4,2" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding PercentageText}" Foreground="{StaticResource ActiveBrush}" FontSize="10" FontWeight="Bold" />
-                                            </Border>
-
-                                            <!-- Total Duration -->
-                                            <TextBlock Grid.Column="6" Text="{Binding DisplayDuration}" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+                                        <!-- Window Title & Document (Wraps on multiple rows) -->
+                                        <Grid Grid.Column="3" VerticalAlignment="Center" Margin="6,0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0" Text="{Binding WindowTitle}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" FontWeight="Medium" />
+                                            <TextBlock Grid.Row="1" Text="{Binding SubActivityDisplay}" TextWrapping="Wrap" Foreground="{StaticResource MeetingBrush}" FontSize="10" Margin="0,2,0,0" />
                                         </Grid>
 
-                                        <!-- Expanded Drawer: All Discrete Session Intervals -->
-                                        <Border Margin="28,8,0,0" Padding="10,8" Background="#0F172A" CornerRadius="4" BorderBrush="#253347" BorderThickness="1"
-                                                Visibility="{Binding IsExpanded, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
-                                            <StackPanel>
-                                                <TextBlock Text="Discrete Session Intervals &amp; Concurrent Secondary Windows:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6" />
-                                                <ItemsControl ItemsSource="{Binding Intervals}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Grid Margin="0,2">
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="130" />
-                                                                    <ColumnDefinition Width="90" />
-                                                                    <ColumnDefinition Width="*" />
-                                                                </Grid.ColumnDefinitions>
-                                                                <TextBlock Grid.Column="0" Text="{Binding TimeRangeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
-                                                                <TextBlock Grid.Column="1" Text="{Binding DisplayDuration}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" />
-                                                                <TextBlock Grid.Column="2" Text="{Binding SubProcessName, StringFormat='Sub: {0}'}" Foreground="{StaticResource MeetingBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
+                                        <!-- Project Badge -->
+                                        <Border Grid.Column="4" Background="#0F172A" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,6,0">
+                                            <TextBlock Text="{Binding ProjectName, TargetNullValue='Unassigned'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
                                         </Border>
-                                    </StackPanel>
-                                </Border>
+
+                                        <!-- Percentage of Day Pill -->
+                                        <Border Grid.Column="5" Background="#1E293B" CornerRadius="4" Padding="4,2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding PercentageText}" Foreground="{StaticResource ActiveBrush}" FontSize="10" FontWeight="Bold" />
+                                        </Border>
+
+                                        <!-- Total Duration -->
+                                        <TextBlock Grid.Column="6" Text="{Binding DisplayDuration}" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+                                    </Grid>
+
+                                    <!-- Expanded Drawer: All Discrete Session Intervals with Text Wrapping -->
+                                    <Border Margin="28,8,0,0" Padding="10,8" Background="#0F172A" CornerRadius="4" BorderBrush="#253347" BorderThickness="1"
+                                            Visibility="{Binding IsExpanded, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                        <StackPanel>
+                                            <TextBlock Text="Discrete Session Intervals &amp; Concurrent Secondary Windows:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6" />
+                                            <ItemsControl ItemsSource="{Binding Intervals}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="130" />
+                                                                <ColumnDefinition Width="90" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding TimeRangeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding DisplayDuration}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding SubProcessName, StringFormat='Sub: {0}'}" Foreground="{StaticResource MeetingBrush}" FontSize="11" TextWrapping="Wrap" Margin="4,0" />
+                                                            <Button Grid.Column="3" Style="{StaticResource SecondaryButton}" Padding="4,1" Margin="4,0,0,0" ToolTip="Preview interval screenshot"
+                                                                    Visibility="{Binding HasScreenshot, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}"
+                                                                    Command="{Binding DataContext.PreviewIntervalScreenshotCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Text="📸 Preview" FontSize="9" Foreground="{StaticResource AccentBrush}" />
+                                                            </Button>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
@@ -305,13 +380,123 @@
                         <TextBlock Text="Assign Activity" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
                         <TextBlock Text="Assign a classification rule or direct project to the selected activity." Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,16" TextWrapping="Wrap" />
 
-                        <!-- Selected Activity Details -->
+                        <!-- Selected Activity Details & Rich Metadata -->
+                        <Border Background="#0F172A" CornerRadius="6" Padding="12" Margin="0,0,0,12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="SELECTED ACTIVITY &amp; CONTEXT" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6" />
+                                
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding SelectedActivity.DisplayAppDescription, TargetNullValue='(Select an activity from list)'}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" TextTrimming="CharacterEllipsis" />
+                                    <Border Grid.Column="1" Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedActivity.ProcessName, TargetNullValue='App'}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                    </Border>
+                                </Grid>
+
+                                <!-- Company & Version / Class Info -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding SelectedActivity.AppCompany, TargetNullValue='Application'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" FontWeight="Medium" />
+                                    <TextBlock Text="{Binding SelectedActivity.AppVersion, StringFormat=' • v{0}'}" Foreground="{StaticResource TextMutedBrush}" FontSize="11" />
+                                    <TextBlock Text="{Binding SelectedActivity.WindowClassName, StringFormat=' • [{0}]'}" Foreground="{StaticResource TextMutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="160" />
+                                </StackPanel>
+
+                                <!-- Executable Path -->
+                                <TextBlock Text="{Binding SelectedActivity.ExecutablePath}" Foreground="{StaticResource TextMutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" ToolTip="{Binding SelectedActivity.ExecutablePath}" />
+
+                                <!-- Window Title -->
+                                <Border Background="#162032" CornerRadius="4" Padding="8,6" Margin="0,0,0,6" BorderBrush="#253347" BorderThickness="1">
+                                    <TextBlock Text="{Binding SelectedActivity.WindowTitle}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" TextWrapping="Wrap" MaxHeight="55" />
+                                </Border>
+
+                                <Grid>
+                                    <TextBlock Text="{Binding SelectedActivity.TimeSpanRangeText, StringFormat='Active: {0}'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                                    <TextBlock Text="{Binding SelectedActivity.DisplayDuration, StringFormat='Total: {0}'}" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" HorizontalAlignment="Right" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- [v0.003: VisualEvidence] Visual Screenshot Evidence Card -->
+                        <!-- [v0.003: VisualEvidence] Visual Screenshot Evidence Card (Multi-Column / Multi-Row Table List) -->
                         <Border Background="#0F172A" CornerRadius="6" Padding="12" Margin="0,0,0,16" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="SELECTED ACTIVITY" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4" />
-                                <TextBlock Text="{Binding SelectedActivity.ProcessName, TargetNullValue='(Select an activity from list)'}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
-                                <TextBlock Text="{Binding SelectedActivity.WindowTitle}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,2,0,4" />
-                                <TextBlock Text="{Binding SelectedActivity.DisplayDuration, StringFormat='Total Duration: {0}'}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="VISUAL EVIDENCE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                                        <Border Background="#1E293B" CornerRadius="3" Padding="4,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="SCREENSHOTS" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
+                                        </Border>
+                                        <Border Background="#0F172A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                Visibility="{Binding HasAnyScreenshots, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                            <TextBlock Text="{Binding ScreenshotCountBadgeText, StringFormat='{}{0} captures'}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Command="{Binding PreviewScreenshotCommand}" Padding="8,2" FontSize="11" ToolTip="Enlarge screenshot full size"
+                                            Visibility="{Binding HasAnyScreenshots, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔍" Margin="0,0,4,0" FontSize="10" />
+                                            <TextBlock Text="Enlarge" FontSize="10" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <!-- Table List on Multiple Rows and Columns (2 Columns) -->
+                                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                              Visibility="{Binding HasAnyScreenshots, Converter={x:Static helpers:BoolToVisibilityConverter.Instance}}">
+                                    <ItemsControl ItemsSource="{Binding SelectedActivityScreenshots}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="2" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="3" CornerRadius="5" Background="#050B14" BorderBrush="#1E293B" BorderThickness="1" Cursor="Hand" ClipToBounds="True">
+                                                    <Border.InputBindings>
+                                                        <MouseBinding Gesture="LeftClick" Command="{Binding DataContext.PreviewScreenshotCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                                    </Border.InputBindings>
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="85" />
+                                                        </Grid.RowDefinitions>
+
+                                                        <!-- Header Bar for Thumbnail -->
+                                                        <Border Grid.Row="0" Background="#111B2B" Padding="5,2" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                                            <Grid>
+                                                                <TextBlock Text="{Binding TimeDisplayText}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                                                                <TextBlock Text="{Binding Label}" FontSize="9" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="85" />
+                                                            </Grid>
+                                                        </Border>
+
+                                                        <!-- Thumbnail with Hover Action -->
+                                                        <Grid Grid.Row="1">
+                                                            <Image Source="{Binding ScreenshotPath}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                            <Border Background="#77000000" VerticalAlignment="Bottom" Padding="4,2">
+                                                                <TextBlock Text="🔍 Click to enlarge" Foreground="{StaticResource TextPrimaryBrush}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- No Screenshot Placeholder -->
+                                <Border Padding="10,14" Background="#0A0F1D" CornerRadius="4" BorderBrush="#1E293B" BorderThickness="1"
+                                        Visibility="{Binding HasAnyScreenshots, Converter={x:Static helpers:InverseBoolToVisibilityConverter.Instance}}">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="📸" FontSize="18" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,3" />
+                                        <TextBlock Text="No visual screenshots captured for this activity" Foreground="{StaticResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 

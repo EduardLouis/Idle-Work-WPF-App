@@ -57,8 +57,39 @@
                         </StackPanel>
                     </Grid>
 
-                    <TextBlock Text="Target Project *" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4" />
-                    <ComboBox x:Name="ProjectsComboBox" Margin="0,0,0,12" />
+                    <!-- Target Project with Quick-Create -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Target Project *" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource SecondaryButton}"
+                                Content="➕ New Project"
+                                FontSize="11"
+                                Padding="8,2"
+                                VerticalAlignment="Center"
+                                Click="NewProject_Click"
+                                ToolTip="Create a new project on the fly" />
+                    </Grid>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="ProjectsComboBox"
+                                  Grid.Column="0"
+                                  Margin="0,0,8,0"
+                                  SelectionChanged="ProjectsComboBox_SelectionChanged" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource SecondaryButton}"
+                                Content="➕ New"
+                                Padding="12,6"
+                                VerticalAlignment="Stretch"
+                                Click="NewProject_Click"
+                                ToolTip="Create a new project on the fly" />
+                    </Grid>
 
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>

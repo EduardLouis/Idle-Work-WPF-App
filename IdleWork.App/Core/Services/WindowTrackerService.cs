@@ -21,6 +21,7 @@ namespace IdleWork.App.Core.Services
         public string ActiveWindowTitle { get; private set; } = string.Empty;
         public string ActiveDocumentName { get; private set; } = string.Empty;
         public int ActiveMonitorIndex { get; private set; } = 0;
+        public IntPtr ActiveWindowHandle => _lastHwnd != IntPtr.Zero ? _lastHwnd : User32.GetForegroundWindow();
         public List<MonitorWindowSnapshot> CurrentTopWindows { get; private set; } = new List<MonitorWindowSnapshot>();
         public List<MonitorInfo> AllMonitors { get; private set; } = new List<MonitorInfo>();
 
@@ -52,6 +53,51 @@ namespace IdleWork.App.Core.Services
             CheckForegroundWindow(hwnd);
         }
 
+        // [v0.003: ExcludeSelfAndOverlays] Determines if a window belongs to this program itself or a transient screen capture overlay
+        public static bool IsIgnoredWindow(IntPtr hwnd, string processName, string title)
+        {
+            if (hwnd != IntPtr.Zero)
+            {
+                User32.GetWindowThreadProcessId(hwnd, out uint procId);
+                if (procId != 0 && procId == Environment.ProcessId)
+                    return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(processName) && string.IsNullOrWhiteSpace(title))
+                return true;
+
+            // 1. Skip self / this program itself
+            if (processName.Equals("IdleWork", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("IdleWork.App", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // 2. Skip Snipping Tool and screen capture overlays
+            if (processName.Equals("SnippingTool", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("ScreenClippingHost", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("SnippingToolApp", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (title.Contains("Snipping Tool", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Screen Clipping", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // 3. Skip system shell overlays
+            if (processName.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("StartMenuExperienceHost", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("SearchHost", StringComparison.OrdinalIgnoreCase) ||
+                processName.Equals("LockApp", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (title == "Program Manager" || title == "Windows Shell Experience Host" || title == "Task Switching")
+                return true;
+
+            if (processName.Equals("explorer", StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(title) || title == "Taskbar"))
+                return true;
+
+            return false;
+        }
+
         public void CheckForegroundWindow(IntPtr? specificHwnd = null)
         {
             IntPtr hwnd = specificHwnd ?? User32.GetForegroundWindow();
@@ -60,6 +106,11 @@ namespace IdleWork.App.Core.Services
 
             string title = Shell32.GetWindowTitle(hwnd);
             var (processName, _) = Shell32.GetProcessInfo(hwnd);
+
+            // [v0.003: ExcludeSelfAndOverlays] If the focused window is this program itself or a screen clipping overlay,
+            // ignore it so we never interrupt or replace the active work session
+            if (IsIgnoredWindow(hwnd, processName, title))
+                return;
 
             // [v0.2: MultiMonitor] Query topmost visible windows across all monitors
             var topWindows = GetTopWindowsForAllMonitors(hwnd);
@@ -108,21 +159,15 @@ namespace IdleWork.App.Core.Services
                 if (User32.DwmGetWindowAttribute(hWnd, User32.DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0)
                     return true;
 
-                // Get process info and skip self
+                // Get process info and skip self / overlays
                 User32.GetWindowThreadProcessId(hWnd, out uint procId);
                 if (procId == currentPid || procId == 0)
                     return true;
 
                 string title = Shell32.GetWindowTitle(hWnd);
-                if (string.IsNullOrWhiteSpace(title))
-                    return true;
-
-                // Skip system shells
-                if (title == "Program Manager" || title == "Windows Shell Experience Host")
-                    return true;
-
                 var (procName, _) = Shell32.GetProcessInfo(hWnd);
-                if (procName == "explorer" && (title == "" || title == "Taskbar"))
+
+                if (IsIgnoredWindow(hWnd, procName, title))
                     return true;
 
                 // Determine which monitor this window is primarily on
@@ -148,21 +193,53 @@ namespace IdleWork.App.Core.Services
             return new List<MonitorWindowSnapshot>(result.Values);
         }
 
+        // [v0.004: MultiMonitor] Robust rectangle intersection area calculation supporting negative virtual desktop coordinates
         private int GetMonitorIndexForRect(User32.RECT rect)
         {
-            int centerX = (rect.Left + rect.Right) / 2;
-            int centerY = (rect.Top + rect.Bottom) / 2;
+            if (AllMonitors.Count == 0) return 0;
+
+            int bestIndex = 0;
+            long maxOverlapArea = -1;
 
             for (int i = 0; i < AllMonitors.Count; i++)
             {
                 var m = AllMonitors[i];
-                if (centerX >= m.Left && centerX < (m.Left + m.Width) &&
-                    centerY >= m.Top && centerY < (m.Top + m.Height))
+                int monRight = m.Left + m.Width;
+                int monBottom = m.Top + m.Height;
+
+                int overlapLeft = Math.Max(rect.Left, m.Left);
+                int overlapRight = Math.Min(rect.Right, monRight);
+                int overlapTop = Math.Max(rect.Top, m.Top);
+                int overlapBottom = Math.Min(rect.Bottom, monBottom);
+
+                int overlapWidth = Math.Max(0, overlapRight - overlapLeft);
+                int overlapHeight = Math.Max(0, overlapBottom - overlapTop);
+                long overlapArea = (long)overlapWidth * overlapHeight;
+
+                if (overlapArea > maxOverlapArea)
                 {
-                    return i;
+                    maxOverlapArea = overlapArea;
+                    bestIndex = i;
                 }
             }
-            return 0;
+
+            // Fallback to center point if no area overlap (e.g., zero-size or minimized window)
+            if (maxOverlapArea <= 0)
+            {
+                int centerX = (rect.Left + rect.Right) / 2;
+                int centerY = (rect.Top + rect.Bottom) / 2;
+                for (int i = 0; i < AllMonitors.Count; i++)
+                {
+                    var m = AllMonitors[i];
+                    if (centerX >= m.Left && centerX < (m.Left + m.Width) &&
+                        centerY >= m.Top && centerY < (m.Top + m.Height))
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            return bestIndex;
         }
 
         public void RefreshMonitors()

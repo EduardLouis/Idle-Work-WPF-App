@@ -1,6 +1,5 @@
-// [v0.1: AudioLevelService] Passive microphone peak audio level meter with hardened COM exception handling
+// [v0.1: AudioLevelService] Passive microphone peak audio level meter with dedicated single-thread COM apartment
 using System;
-using System.Diagnostics;
 using System.Threading;
 using NAudio.CoreAudioApi;
 
@@ -11,7 +10,6 @@ namespace IdleWork.App.Core.Services
         private readonly Thread _workerThread;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private bool _isDisposed;
-        private bool _isAudioMeterSupported = true;
 
         public float CurrentPeakLevel { get; private set; }
         public float SensitivityThreshold { get; set; } = 0.05f; // 5% peak audio
@@ -26,8 +24,7 @@ namespace IdleWork.App.Core.Services
                 IsBackground = true,
                 Name = "IdleWork_AudioMeter"
             };
-            // [v0.1: CoreAudio] STA apartment state for Windows COM multimedia devices
-            _workerThread.SetApartmentState(ApartmentState.STA);
+            _workerThread.SetApartmentState(ApartmentState.MTA);
             _workerThread.Start();
         }
 
@@ -40,60 +37,27 @@ namespace IdleWork.App.Core.Services
             while (!_cts.Token.IsCancellationRequested)
             {
                 float peak = 0.0f;
-
                 try
                 {
-                    // Refresh / acquire device periodically if missing or retry after backoff
-                    double retryInterval = _isAudioMeterSupported ? 5.0 : 30.0;
-                    if (captureDevice == null && (DateTime.Now - lastDeviceCheck).TotalSeconds > retryInterval)
+                    // Refresh / acquire device periodically if missing
+                    if (captureDevice == null && (DateTime.Now - lastDeviceCheck).TotalSeconds > 3.0)
                     {
                         lastDeviceCheck = DateTime.Now;
-                        try
+                        enumerator ??= new MMDeviceEnumerator();
+                        if (enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Communications))
                         {
-                            enumerator ??= new MMDeviceEnumerator();
-                            if (enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Communications))
-                            {
-                                captureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
-                            }
-                            else if (enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Console))
-                            {
-                                captureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[AudioLevelService] Endpoint acquisition notice: {ex.Message}");
-                            captureDevice = null;
+                            captureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
                         }
                     }
 
-                    if (captureDevice != null && _isAudioMeterSupported)
+                    if (captureDevice != null)
                     {
-                        try
-                        {
-                            peak = captureDevice.AudioMeterInformation.MasterPeakValue;
-                        }
-                        catch (InvalidCastException icEx)
-                        {
-                            // Some audio devices / virtual endpoints do not support IAudioMeterInformation COM interface
-                            Debug.WriteLine($"[AudioLevelService] Audio meter COM interface not supported: {icEx.Message}");
-                            _isAudioMeterSupported = false;
-                            captureDevice?.Dispose();
-                            captureDevice = null;
-                            peak = 0.0f;
-                        }
-                        catch (Exception devEx)
-                        {
-                            Debug.WriteLine($"[AudioLevelService] Audio meter read error: {devEx.Message}");
-                            captureDevice?.Dispose();
-                            captureDevice = null;
-                            peak = 0.0f;
-                        }
+                        peak = captureDevice.AudioMeterInformation.MasterPeakValue;
                     }
                 }
-                catch (Exception loopEx)
+                catch (Exception)
                 {
-                    Debug.WriteLine($"[AudioLevelService] Loop exception: {loopEx.Message}");
+                    // If device disconnected or COM state invalid, reset device handle and retry later
                     try
                     {
                         captureDevice?.Dispose();
@@ -104,14 +68,7 @@ namespace IdleWork.App.Core.Services
                 }
 
                 CurrentPeakLevel = peak;
-                try
-                {
-                    PeakLevelChanged?.Invoke(this, peak);
-                }
-                catch
-                {
-                    // Subscriber error should not crash meter thread
-                }
+                PeakLevelChanged?.Invoke(this, peak);
 
                 try
                 {
@@ -137,11 +94,7 @@ namespace IdleWork.App.Core.Services
             _isDisposed = true;
 
             _cts.Cancel();
-            try
-            {
-                _workerThread.Interrupt();
-            }
-            catch { }
+            _workerThread.Interrupt();
         }
     }
 }

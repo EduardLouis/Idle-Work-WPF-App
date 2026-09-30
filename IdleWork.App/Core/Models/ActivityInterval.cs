@@ -24,6 +24,12 @@ namespace IdleWork.App.Core.Models
 
         public string? SubWindowTitle { get; set; }
 
+        // [v0.003: Screenshot] Screenshot path for this specific discrete interval
+        public string? ScreenshotPath { get; set; }
+
+        [Ignore]
+        public bool HasScreenshot => !string.IsNullOrEmpty(ScreenshotPath) && System.IO.File.Exists(ScreenshotPath);
+
         [Ignore]
         public TimeSpan Duration => TimeSpan.FromSeconds(DurationSeconds);
 

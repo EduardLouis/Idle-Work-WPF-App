@@ -1,5 +1,6 @@
 // [v0.2: Categories] Predefined category entity for activity classification
 using SQLite;
+using IdleWork.App.ViewModels;
 
 namespace IdleWork.App.Core.Models
 {

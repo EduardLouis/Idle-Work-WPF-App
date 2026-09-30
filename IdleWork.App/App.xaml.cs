@@ -80,6 +80,9 @@ namespace IdleWork.App
         {
             try
             {
+                // [v0.003: LoggingService] Forward to unified logging engine
+                IdleWork.App.Core.Services.LoggingService.Instance.LogInfo("Startup", message);
+
                 string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}";
                 System.Diagnostics.Debug.WriteLine($"[IdleWork.Startup] {message}");
 
@@ -103,6 +106,9 @@ namespace IdleWork.App
         {
             try
             {
+                // [v0.003: LoggingService] Forward to unified logging engine
+                IdleWork.App.Core.Services.LoggingService.Instance.LogError(context, ex.Message, ex);
+
                 string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{context}]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}";
                 System.Diagnostics.Debug.WriteLine($"[IdleWork.Crash] {context}: {ex}");
 

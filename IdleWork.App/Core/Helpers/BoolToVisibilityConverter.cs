@@ -28,4 +28,28 @@ namespace IdleWork.App.Core.Helpers
             return false;
         }
     }
+
+    // [v0.003: Helpers] Inverted Boolean to Visibility converter with singleton Instance
+    public class InverseBoolToVisibilityConverter : IValueConverter
+    {
+        public static readonly InverseBoolToVisibilityConverter Instance = new InverseBoolToVisibilityConverter();
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool b)
+            {
+                return !b ? Visibility.Visible : Visibility.Collapsed;
+            }
+            return Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is Visibility v)
+            {
+                return v != Visibility.Visible;
+            }
+            return true;
+        }
+    }
 }
